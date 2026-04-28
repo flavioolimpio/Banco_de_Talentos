@@ -1,0 +1,2 @@
+cpf,nome,email,telefone,senha_hash,vinculo,instituicao,lattes,resumo,perfil,data_cadastro
+admim,Usuario Teste,admim@ifg.edu.br,,e9919c0f91e673604c922f8a0f51f7e1861bcf92eb8b3b8f8cc499b5e6b5721d,Administrador,Polo de Inovacao IFG,,Usuario temporario para testes da area logada.,admin,2026-04-28 15:40:37
