@@ -193,12 +193,26 @@ def inject_css(show_sidebar: bool = False) -> None:
 
             .sidebar-footer {
                 border-top: 1px solid rgba(255,255,255,.10);
+                bottom: .9rem;
                 font-size: .78rem;
                 font-weight: 800;
+                left: 1rem;
                 line-height: 1.15;
-                margin-top: .85rem;
                 padding: .85rem .2rem 0;
-                width: 100%;
+                position: fixed;
+                width: 195px;
+            }
+
+            @media (max-height: 640px) {
+                .sidebar-spacer {
+                    height: .5rem;
+                }
+
+                .sidebar-footer {
+                    bottom: .45rem;
+                    font-size: .68rem;
+                    padding-top: .55rem;
+                }
             }
 
             .sidebar-footer .footer-icon {
@@ -390,17 +404,17 @@ def inject_css(show_sidebar: bool = False) -> None:
             border-radius: 5px;
             box-shadow: 0 2px 7px rgba(0, 0, 0, .16);
             display: grid;
-            gap: 1.25rem;
-            grid-template-columns: minmax(0, 1.75fr) minmax(290px, .45fr);
+            gap: .75rem;
+            grid-template-columns: minmax(0, 1fr) 410px;
             height: calc(100vh - 104px);
             overflow: hidden;
-            padding: .75rem 2.25rem;
+            padding: .5rem 1.25rem .5rem .35rem;
         }}
 
         .hero-art {{
             align-items: center;
             display: flex;
-            height: min(620px, calc(100vh - 128px));
+            height: min(720px, calc(100vh - 112px));
             justify-content: center;
             position: relative;
         }}
@@ -408,7 +422,7 @@ def inject_css(show_sidebar: bool = False) -> None:
         .home-illustration {{
             display: block;
             height: 100%;
-            max-height: 620px;
+            max-height: 720px;
             max-width: 100%;
             object-fit: contain;
             width: 100%;
