@@ -18,7 +18,8 @@ except ModuleNotFoundError:
 
 
 APP_TITLE = "Banco de Talentos - Polo de Inovação IFG"
-LOGO_PATH = Path("logo-ifg-vertical.png")
+LOGO_PATH = Path("imagens/logo-ifg-vertical.png")
+HOME_IMAGE_PATH = Path("imagens/home.png")
 DATA_DIR = Path("data")
 USERS_FILE = DATA_DIR / "usuarios.csv"
 DB_FILE = DATA_DIR / "banco_talentos.db"
@@ -170,6 +171,10 @@ def inject_css(show_sidebar: bool = False) -> None:
                 margin-top: .75rem;
             }
 
+            .sidebar-spacer {
+                height: clamp(1rem, 18vh, 7rem);
+            }
+
             .sidebar-nav + div [data-testid="stButton"],
             [data-testid="stSidebar"] [data-testid="stButton"] {
                 margin: .3rem 0;
@@ -187,14 +192,12 @@ def inject_css(show_sidebar: bool = False) -> None:
 
             .sidebar-footer {
                 border-top: 1px solid rgba(255,255,255,.10);
-                bottom: .9rem;
                 font-size: .78rem;
                 font-weight: 800;
-                left: 1rem;
                 line-height: 1.15;
-                padding-top: .85rem;
-                position: fixed;
-                width: 195px;
+                margin-top: .85rem;
+                padding: .85rem .2rem 0;
+                width: 100%;
             }
 
             .sidebar-footer .footer-icon {
@@ -394,8 +397,20 @@ def inject_css(show_sidebar: bool = False) -> None:
         }}
 
         .hero-art {{
-            height: min(360px, calc(100vh - 165px));
+            align-items: center;
+            display: flex;
+            height: min(430px, calc(100vh - 155px));
+            justify-content: center;
             position: relative;
+        }}
+
+        .home-illustration {{
+            display: block;
+            height: 100%;
+            max-height: 430px;
+            max-width: 100%;
+            object-fit: contain;
+            width: 100%;
         }}
 
         .art-blob {{
@@ -825,6 +840,16 @@ def render_logo() -> None:
         )
 
 
+def image_data_uri(path: Path) -> str:
+    if not path.exists():
+        return ""
+
+    suffix = path.suffix.lower().lstrip(".")
+    mime = "jpeg" if suffix in {"jpg", "jpeg"} else suffix or "png"
+    encoded = base64.b64encode(path.read_bytes()).decode("utf-8")
+    return f"data:image/{mime};base64,{encoded}"
+
+
 def go_to(page: str) -> None:
     st.session_state.current_page = page
     st.rerun()
@@ -1087,14 +1112,14 @@ def render_user_sidebar() -> None:
             st.rerun()
     st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
-    st.sidebar.markdown("<div style='height: 34vh;'></div>", unsafe_allow_html=True)
+    st.sidebar.markdown('<div class="sidebar-spacer"></div>', unsafe_allow_html=True)
     if st.sidebar.button("↪  Sair", key="nav_sair", use_container_width=True):
         logout()
     st.sidebar.markdown(
         """
         <div class="sidebar-footer">
             <span class="footer-icon">BT</span>
-            Banco de Especialistas<br>
+            Banco de Talentos<br>
             IFG - Polo de Inovação
         </div>
         """,
@@ -1115,11 +1140,12 @@ def render_logged_header(content: str) -> None:
 
 
 def page_home(user: dict[str, str]) -> None:
-    render_logged_header("Olá! Boas vindas à plataforma do <strong>Banco de Especialistas</strong>")
-    st.markdown(
-        """
-        <div class="workspace">
-            <div class="hero-art">
+    render_logged_header("Olá! Boas vindas à plataforma do <strong>Banco de Talentos</strong>")
+    home_image = image_data_uri(HOME_IMAGE_PATH)
+    if home_image:
+        hero_content = f'<img class="home-illustration" src="{home_image}" alt="Banco de Talentos">'
+    else:
+        hero_content = """
                 <div class="art-blob"></div>
                 <div class="art-blob two"></div>
                 <div class="screen"></div>
@@ -1127,6 +1153,12 @@ def page_home(user: dict[str, str]) -> None:
                 <div class="globe"></div>
                 <div class="person"></div>
                 <div class="ground"></div>
+        """
+    st.markdown(
+        f"""
+        <div class="workspace">
+            <div class="hero-art">
+                {hero_content}
             </div>
             <div>
                 <div class="action-card">
