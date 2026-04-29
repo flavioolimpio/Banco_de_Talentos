@@ -390,17 +390,17 @@ def inject_css(show_sidebar: bool = False) -> None:
             border-radius: 5px;
             box-shadow: 0 2px 7px rgba(0, 0, 0, .16);
             display: grid;
-            gap: 2rem;
-            grid-template-columns: 1.25fr .55fr;
+            gap: 1.25rem;
+            grid-template-columns: minmax(0, 1.75fr) minmax(290px, .45fr);
             height: calc(100vh - 104px);
             overflow: hidden;
-            padding: 1.25rem 3rem;
+            padding: .75rem 2.25rem;
         }}
 
         .hero-art {{
             align-items: center;
             display: flex;
-            height: min(430px, calc(100vh - 155px));
+            height: min(620px, calc(100vh - 128px));
             justify-content: center;
             position: relative;
         }}
@@ -408,7 +408,7 @@ def inject_css(show_sidebar: bool = False) -> None:
         .home-illustration {{
             display: block;
             height: 100%;
-            max-height: 430px;
+            max-height: 620px;
             max-width: 100%;
             object-fit: contain;
             width: 100%;
@@ -507,6 +507,7 @@ def inject_css(show_sidebar: bool = False) -> None:
             margin: 1.5rem 0;
             min-height: 76px;
             padding: 0 1.7rem;
+            width: min(100%, 410px);
         }}
 
         .action-card.primary {{
