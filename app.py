@@ -104,8 +104,18 @@ def inject_css(show_sidebar: bool = False) -> None:
 
     if show_sidebar:
         sidebar_css = """
-            [data-testid="collapsedControl"] {
+            [data-testid="collapsedControl"],
+            [data-testid="stSidebarCollapseButton"],
+            [data-testid="stSidebarCollapsedControl"],
+            button[title="Close sidebar"],
+            button[title="Open sidebar"],
+            button[aria-label="Close sidebar"],
+            button[aria-label="Open sidebar"],
+            button[aria-label="Collapse sidebar"],
+            button[aria-label="Expand sidebar"] {
                 display: none !important;
+                visibility: hidden !important;
+                pointer-events: none !important;
             }
 
             [data-testid="stSidebar"] {
