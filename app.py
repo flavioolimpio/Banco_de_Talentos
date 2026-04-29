@@ -8,6 +8,7 @@ import sqlite3
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
+from urllib.parse import quote
 
 import streamlit as st
 
@@ -91,7 +92,7 @@ def inject_css(show_sidebar: bool = False) -> None:
     sidebar_css = """
         [data-testid="stSidebar"],
         [data-testid="collapsedControl"] {
-            display: none;
+            display: none !important;
         }
     """
     container_css = """
@@ -104,53 +105,33 @@ def inject_css(show_sidebar: bool = False) -> None:
 
     if show_sidebar:
         sidebar_css = """
-            [data-testid="stSidebar"] {
-                background: #2c363f;
-                border-right: 0;
-                display: block !important;
-                flex-shrink: 0 !important;
-                min-width: 235px !important;
-                overflow: hidden;
-                width: 235px !important;
-            }
-
-            [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
-                height: 100vh !important;
-                overflow-y: auto !important;
-                padding: 1.1rem .85rem .8rem;
-                width: 235px;
-            }
-
-            [data-testid="stSidebar"] * {
-                color: #ffffff;
-            }
-
-            [data-testid="stSidebar"] button {
-                background: rgba(255, 255, 255, .03) !important;
-                border: 0;
-                box-shadow: none;
-                color: #ffffff !important;
-                justify-content: flex-start;
-                min-height: 2.6rem;
-                text-transform: none;
-                width: 100%;
-            }
-
-            [data-testid="stSidebar"] button:hover {
-                background: rgba(255, 255, 255, .08) !important;
+            [data-testid="stSidebar"],
+            [data-testid="collapsedControl"] {
+                display: none !important;
             }
 
             [data-testid="stAppViewContainer"] {
                 overflow: hidden;
             }
 
-            .sidebar-user {
+            .fixed-menu {
+                background: #2c363f;
+                border-radius: 8px;
+                color: #ffffff;
+                display: flex;
+                flex-direction: column;
+                height: calc(100vh - 1.5rem);
+                min-height: 520px;
+                padding: 1rem .85rem;
+            }
+
+            .fixed-menu-user {
                 border-bottom: 1px solid rgba(255,255,255,.10);
                 margin: 0 0 1rem;
                 padding: .25rem .6rem 1rem;
             }
 
-            .sidebar-user strong {
+            .fixed-menu-user strong {
                 display: block;
                 font-size: .9rem;
                 line-height: 1.15;
@@ -159,7 +140,7 @@ def inject_css(show_sidebar: bool = False) -> None:
                 white-space: nowrap;
             }
 
-            .sidebar-user span {
+            .fixed-menu-user span {
                 color: rgba(255,255,255,.78);
                 display: block;
                 font-size: .82rem;
@@ -168,54 +149,42 @@ def inject_css(show_sidebar: bool = False) -> None:
                 margin-top: .15rem;
             }
 
-            .sidebar-nav {
+            .fixed-menu-nav {
                 margin-top: .75rem;
             }
 
-            .sidebar-spacer {
-                height: clamp(1rem, 18vh, 7rem);
+            .fixed-menu-link {
+                align-items: center;
+                background: rgba(255, 255, 255, .03);
+                border-radius: 18px;
+                color: #ffffff !important;
+                display: flex;
+                font-size: .95rem;
+                font-weight: 800;
+                gap: .45rem;
+                margin: .45rem 0;
+                min-height: 2.6rem;
+                padding: .35rem .85rem;
+                text-decoration: none !important;
             }
 
-            .sidebar-nav + div [data-testid="stButton"],
-            [data-testid="stSidebar"] [data-testid="stButton"] {
-                margin: .3rem 0;
+            .fixed-menu-link:hover,
+            .fixed-menu-link.active {
+                background: rgba(255, 255, 255, .12);
             }
 
-            [data-testid="stSidebar"] [data-testid="stButton"] button {
-                border-radius: 18px !important;
-                font-size: .95rem !important;
-                font-weight: 800 !important;
-                letter-spacing: 0 !important;
-                padding: .35rem .85rem !important;
-                text-align: left !important;
-                text-transform: none !important;
-            }
-
-            .sidebar-footer {
+            .fixed-menu-footer {
                 border-top: 1px solid rgba(255,255,255,.10);
-                bottom: .9rem;
+                color: #ffffff;
                 font-size: .78rem;
                 font-weight: 800;
-                left: 1rem;
                 line-height: 1.15;
+                margin-top: auto;
                 padding: .85rem .2rem 0;
-                position: fixed;
-                width: 195px;
+                width: 100%;
             }
 
-            @media (max-height: 640px) {
-                .sidebar-spacer {
-                    height: .5rem;
-                }
-
-                .sidebar-footer {
-                    bottom: .45rem;
-                    font-size: .68rem;
-                    padding-top: .55rem;
-                }
-            }
-
-            .sidebar-footer .footer-icon {
+            .fixed-menu-footer .footer-icon {
                 border: 2px solid var(--lime);
                 border-radius: 6px;
                 color: var(--lime);
@@ -229,7 +198,7 @@ def inject_css(show_sidebar: bool = False) -> None:
         container_css = """
             .block-container {
                 max-width: none;
-                padding: .2rem .75rem .75rem .75rem;
+                padding: .75rem;
             }
         """
 
@@ -1101,48 +1070,47 @@ def logout() -> None:
     go_to("login")
 
 
-def render_user_sidebar() -> None:
+def render_user_menu() -> None:
     user = st.session_state.get("authenticated_user", {})
     name = user.get("nome", "Usuário")
     role = user.get("vinculo", "Colaborador/a Externo/a")
     if role == "Administrador":
         role = "Colaborador/a Externo/a"
-    st.sidebar.markdown(
+
+    active = st.session_state.get("user_menu", "Administração" if user.get("perfil") == "admin" else "Home")
+    if user.get("perfil") == "admin":
+        items = [("Administração", "▣", "Administração")]
+    else:
+        items = [
+            ("Home", "⌂", "Home"),
+            ("Meu Cadastro", "◉", "Meu Cadastro"),
+            ("Minha Pontuação", "♕", "Minha Pontuação"),
+        ]
+
+    links = ""
+    for label, icon, target in items:
+        active_class = " active" if active == target else ""
+        links += (
+            f'<a class="fixed-menu-link{active_class}" href="?menu={quote(target)}" target="_self">'
+            f"<span>{icon}</span><span>{label}</span></a>"
+        )
+
+    st.markdown(
         f"""
-        <div class="sidebar-user">
+        <div class="fixed-menu">
+        <div class="fixed-menu-user">
             <strong>{name}</strong>
             <span>{role}</span>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.sidebar.markdown('<div class="sidebar-nav">', unsafe_allow_html=True)
-    if user.get("perfil") == "admin":
-        if st.sidebar.button("▣  Administração", key="nav_admin", use_container_width=True):
-            st.session_state.user_menu = "Administração"
-            st.rerun()
-    else:
-        if st.sidebar.button("⌂  Home", key="nav_home", use_container_width=True):
-            st.session_state.user_menu = "Home"
-            st.rerun()
-        if st.sidebar.button("◉  Meu Cadastro", key="nav_cadastro", use_container_width=True):
-            st.session_state.user_menu = "Meu Cadastro"
-            st.rerun()
-        if st.sidebar.button("♕  Minha Pontuação", key="nav_pontuacao", use_container_width=True):
-            st.session_state.user_menu = "Minha Pontuação"
-            st.rerun()
-    st.sidebar.markdown("</div>", unsafe_allow_html=True)
-
-    st.sidebar.markdown('<div class="sidebar-spacer"></div>', unsafe_allow_html=True)
-    if st.sidebar.button("↪  Sair", key="nav_sair", use_container_width=True):
-        logout()
-    st.sidebar.markdown(
-        """
-        <div class="sidebar-footer">
+        <div class="fixed-menu-nav">
+            {links}
+            <a class="fixed-menu-link" href="?logout=1" target="_self"><span>↪</span><span>Sair</span></a>
+        </div>
+        <div class="fixed-menu-footer">
             <span class="footer-icon">BT</span>
             Banco de Talentos<br>
             IFG - Polo de Inovação
+        </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1449,20 +1417,32 @@ def page_area_logada() -> None:
     if not user:
         go_to("login")
 
-    render_user_sidebar()
+    if st.query_params.get("logout") == "1":
+        st.query_params.clear()
+        logout()
+
+    menu_param = st.query_params.get("menu")
+    allowed_menu = ["Administração"] if user.get("perfil") == "admin" else ["Home", "Meu Cadastro", "Minha Pontuação"]
+    if menu_param in allowed_menu:
+        st.session_state.user_menu = menu_param
+
     active = st.session_state.get("user_menu", "Home")
     if user.get("perfil") == "admin":
         active = "Administração"
         st.session_state.user_menu = active
 
-    if active == "Meu Cadastro":
-        page_meu_cadastro(user)
-    elif active == "Minha Pontuação":
-        page_minha_pontuacao(user)
-    elif active == "Administração":
-        page_administracao(user)
-    else:
-        page_home(user)
+    nav_col, content_col = st.columns([0.16, 0.84], gap="small")
+    with nav_col:
+        render_user_menu()
+    with content_col:
+        if active == "Meu Cadastro":
+            page_meu_cadastro(user)
+        elif active == "Minha Pontuação":
+            page_minha_pontuacao(user)
+        elif active == "Administração":
+            page_administracao(user)
+        else:
+            page_home(user)
 
 
 def main() -> None:
