@@ -404,25 +404,25 @@ def inject_css(show_sidebar: bool = False) -> None:
             border-radius: 5px;
             box-shadow: 0 2px 7px rgba(0, 0, 0, .16);
             display: grid;
-            gap: .75rem;
-            grid-template-columns: minmax(0, 1fr) 410px;
+            gap: .35rem;
+            grid-template-columns: minmax(0, 1fr) 360px;
             height: calc(100vh - 104px);
             overflow: hidden;
-            padding: .5rem 1.25rem .5rem .35rem;
+            padding: 0 .65rem 0 0;
         }}
 
         .hero-art {{
-            align-items: center;
+            align-items: flex-start;
             display: flex;
-            height: min(720px, calc(100vh - 112px));
-            justify-content: center;
+            height: calc(100vh - 104px);
+            justify-content: flex-start;
             position: relative;
         }}
 
         .home-illustration {{
             display: block;
             height: 100%;
-            max-height: 720px;
+            max-height: none;
             max-width: 100%;
             object-fit: contain;
             width: 100%;
@@ -518,7 +518,7 @@ def inject_css(show_sidebar: bool = False) -> None:
             font-weight: 700;
             gap: .8rem;
             justify-content: space-between;
-            margin: 1.5rem 0;
+            margin: 0;
             min-height: 76px;
             padding: 0 1.7rem;
             width: min(100%, 410px);
@@ -527,6 +527,12 @@ def inject_css(show_sidebar: bool = False) -> None:
         .action-card.primary {{
             background: var(--lime);
             border-color: var(--lime);
+        }}
+
+        .workspace > div:last-child {{
+            align-self: center;
+            justify-self: end;
+            width: 100%;
         }}
 
         .placeholder-card {{
