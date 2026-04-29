@@ -720,6 +720,16 @@ def ensure_users_file() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sessoes (
+                token TEXT PRIMARY KEY,
+                cpf TEXT NOT NULL,
+                data_criacao TEXT NOT NULL,
+                FOREIGN KEY (cpf) REFERENCES usuarios(cpf)
+            )
+            """
+        )
 
     users = read_users()
     if not any(user["cpf"] == "admim" for user in users):
@@ -784,6 +794,41 @@ def authenticate(login: str, password: str) -> dict[str, str] | None:
     if user and verify_password(password, user["senha_hash"]):
         return user
     return None
+
+
+def create_login_session(cpf: str) -> str:
+    token = secrets.token_urlsafe(32)
+    with db_connection() as conn:
+        conn.execute(
+            "INSERT INTO sessoes (token, cpf, data_criacao) VALUES (?, ?, ?)",
+            (token, cpf, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        )
+    return token
+
+
+def delete_login_session(token: str | None) -> None:
+    if not token:
+        return
+
+    with db_connection() as conn:
+        conn.execute("DELETE FROM sessoes WHERE token = ?", (token,))
+
+
+def find_user_by_session(token: str | None) -> dict[str, str] | None:
+    if not token:
+        return None
+
+    with db_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT usuarios.*
+            FROM sessoes
+            JOIN usuarios ON usuarios.cpf = sessoes.cpf
+            WHERE sessoes.token = ?
+            """,
+            (token,),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def update_user(cpf: str, values: dict[str, str]) -> dict[str, str] | None:
@@ -872,7 +917,12 @@ def page_login() -> None:
             user = authenticate(login, password)
             if user:
                 st.session_state.authenticated_user = user
-                st.session_state.user_menu = "Administração" if user.get("perfil") == "admin" else "Home"
+                token = create_login_session(user["cpf"])
+                menu = "Administração" if user.get("perfil") == "admin" else "Home"
+                st.session_state.auth_token = token
+                st.session_state.user_menu = menu
+                st.query_params["session"] = token
+                st.query_params["menu"] = menu
                 go_to("area_logada")
             else:
                 st.error("CPF/usuário ou senha inválidos.")
@@ -1065,8 +1115,11 @@ def page_cadastro() -> None:
 
 
 def logout() -> None:
+    delete_login_session(st.session_state.get("auth_token") or st.query_params.get("session"))
     st.session_state.pop("authenticated_user", None)
+    st.session_state.pop("auth_token", None)
     st.session_state.user_menu = "Home"
+    st.query_params.clear()
     go_to("login")
 
 
@@ -1088,12 +1141,15 @@ def render_user_menu() -> None:
         ]
 
     links = ""
+    token = st.session_state.get("auth_token") or st.query_params.get("session", "")
+    token_query = f"session={quote(token)}&" if token else ""
     for label, icon, target in items:
         active_class = " active" if active == target else ""
         links += (
-            f'<a class="fixed-menu-link{active_class}" href="?menu={quote(target)}" target="_self">'
+            f'<a class="fixed-menu-link{active_class}" href="?{token_query}menu={quote(target)}" target="_self">'
             f"<span>{icon}</span><span>{label}</span></a>"
         )
+    logout_href = f"?{token_query}logout=1" if token_query else "?logout=1"
 
     st.markdown(
         f"""
@@ -1104,7 +1160,7 @@ def render_user_menu() -> None:
         </div>
         <div class="fixed-menu-nav">
             {links}
-            <a class="fixed-menu-link" href="?logout=1" target="_self"><span>↪</span><span>Sair</span></a>
+            <a class="fixed-menu-link" href="{logout_href}" target="_self"><span>↪</span><span>Sair</span></a>
         </div>
         <div class="fixed-menu-footer">
             <span class="footer-icon">BT</span>
@@ -1415,6 +1471,13 @@ def page_administracao(user: dict[str, str]) -> None:
 def page_area_logada() -> None:
     user = st.session_state.get("authenticated_user")
     if not user:
+        token = st.query_params.get("session")
+        user = find_user_by_session(token)
+        if user:
+            st.session_state.authenticated_user = user
+            st.session_state.auth_token = token
+
+    if not user:
         go_to("login")
 
     if st.query_params.get("logout") == "1":
@@ -1445,8 +1508,39 @@ def page_area_logada() -> None:
             page_home(user)
 
 
+def restore_session_from_query() -> None:
+    if st.query_params.get("logout") == "1":
+        delete_login_session(st.query_params.get("session"))
+        st.session_state.pop("authenticated_user", None)
+        st.session_state.pop("auth_token", None)
+        st.session_state.current_page = "login"
+        st.session_state.user_menu = "Home"
+        st.query_params.clear()
+        return
+
+    token = st.query_params.get("session")
+    if st.session_state.get("authenticated_user") or not token:
+        return
+
+    user = find_user_by_session(token)
+    if not user:
+        return
+
+    st.session_state.authenticated_user = user
+    st.session_state.auth_token = token
+    st.session_state.current_page = "area_logada"
+
+    menu = st.query_params.get("menu")
+    allowed = ["Administração"] if user.get("perfil") == "admin" else ["Home", "Meu Cadastro", "Minha Pontuação"]
+    if menu in allowed:
+        st.session_state.user_menu = menu
+    else:
+        st.session_state.user_menu = allowed[0]
+
+
 def main() -> None:
     ensure_users_file()
+    restore_session_from_query()
 
     if "current_page" not in st.session_state:
         st.session_state.current_page = "login"
