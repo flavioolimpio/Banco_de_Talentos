@@ -105,18 +105,27 @@ def inject_css(show_sidebar: bool = False) -> None:
     if show_sidebar:
         sidebar_css = """
             [data-testid="collapsedControl"] {
-                display: none;
+                display: none !important;
             }
 
             [data-testid="stSidebar"] {
                 background: #2c363f;
                 border-right: 0;
+                display: block !important;
+                flex-shrink: 0 !important;
+                height: 100vh !important;
+                left: 0 !important;
                 min-width: 235px !important;
                 overflow: hidden;
+                position: fixed !important;
+                top: 0 !important;
                 width: 235px !important;
+                z-index: 1000 !important;
             }
 
             [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+                height: 100vh !important;
+                overflow-y: auto !important;
                 padding: 1.1rem .85rem .8rem;
                 width: 235px;
             }
@@ -229,7 +238,7 @@ def inject_css(show_sidebar: bool = False) -> None:
         container_css = """
             .block-container {
                 max-width: none;
-                padding: .2rem .75rem .75rem .75rem;
+                padding: .2rem .75rem .75rem 245px;
             }
         """
 
