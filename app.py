@@ -20,6 +20,7 @@ except ModuleNotFoundError:
 APP_TITLE = "Banco de Talentos - Polo de Inovação IFG"
 LOGO_PATH = Path("imagens/logo-ifg-vertical.png")
 HOME_IMAGE_PATH = Path("imagens/home.png")
+FAVICON_PATH = Path("imagens/favicon.png")
 DATA_DIR = Path("data")
 USERS_FILE = DATA_DIR / "usuarios.csv"
 DB_FILE = DATA_DIR / "banco_talentos.db"
@@ -80,7 +81,7 @@ CNPQ_AREAS = [
 
 st.set_page_config(
     page_title=APP_TITLE,
-    page_icon="IFG",
+    page_icon=str(FAVICON_PATH),
     layout="wide",
     initial_sidebar_state="expanded",
 )
