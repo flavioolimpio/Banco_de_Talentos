@@ -79,6 +79,93 @@ CNPQ_AREAS = [
     "Outra",
 ]
 
+MODALIDADES_INSCRICAO = ["Servidor", "Estudante", "Colaborador Externo"]
+
+QUADROS_INSCRICAO = {
+    "Servidor": [
+        {
+            "id": "titulacao",
+            "criterio": "Titulação",
+            "regra": "Pontuação conforme maior titulação comprovada.",
+            "maximo": 100.0,
+        },
+        {
+            "id": "pos_doutoramento",
+            "criterio": "Estágio pós-doutoramento",
+            "regra": "5 pts por comprovação.",
+            "maximo": 5.0,
+        },
+        {
+            "id": "experiencia_fora_ict",
+            "criterio": "Experiência profissional fora da ICT",
+            "regra": "0,3 ponto por mês.",
+            "maximo": 120.0,
+        },
+        {
+            "id": "gestao_fora_ict",
+            "criterio": "Experiência em gestão fora da ICT",
+            "regra": "0,4 ponto por mês.",
+            "maximo": 180.0,
+        },
+        {
+            "id": "coordenacao_empresas_fundacao",
+            "criterio": "Coordenação de projetos com empresas + fundação",
+            "regra": "1,3 ponto por projeto por mês.",
+            "maximo": 480.0,
+        },
+        {
+            "id": "projetos_pdi_polo",
+            "criterio": "Projetos de PD&I no Polo de Inovação IFG",
+            "regra": "1 ponto por projeto por mês.",
+            "maximo": 360.0,
+        },
+        {
+            "id": "projetos_pdi_fora_polo",
+            "criterio": "Projetos de PD&I fora do Polo",
+            "regra": "0,7 ponto por projeto por mês.",
+            "maximo": 200.0,
+        },
+        {
+            "id": "coordenacao_fomento_publico",
+            "criterio": "Coordenação de projetos com fomento público",
+            "regra": "0,8 ponto por projeto por semestre.",
+            "maximo": 200.0,
+        },
+        {
+            "id": "participacao_orientacao_projetos",
+            "criterio": "Participação/orientação em projetos",
+            "regra": "0,3 ponto por projeto por semestre.",
+            "maximo": 120.0,
+        },
+        {
+            "id": "patente_depositada",
+            "criterio": "Patente depositada",
+            "regra": "2 pts por item.",
+            "maximo": 20.0,
+        },
+        {
+            "id": "registro_software",
+            "criterio": "Registro de software",
+            "regra": "1 pt por item.",
+            "maximo": 10.0,
+        },
+        {
+            "id": "artigos_cientificos",
+            "criterio": "Artigos científicos",
+            "regra": "1 pt por artigo.",
+            "maximo": 10.0,
+        },
+        {
+            "id": "capacitacoes_polo",
+            "criterio": "Capacitações no Polo",
+            "regra": "0,3 pt por participação.",
+            "maximo": 9.0,
+        },
+    ],
+    "Estudante": [],
+    "Colaborador Externo": [],
+}
+
 
 st.set_page_config(
     page_title=APP_TITLE,
@@ -510,6 +597,78 @@ def inject_css(show_sidebar: bool = False) -> None:
             border-radius: 5px;
             box-shadow: 0 2px 7px rgba(0, 0, 0, .14);
             padding: 1.4rem;
+        }}
+
+        .score-page {{
+            background: #ffffff;
+            border: 1px solid #e8e8e8;
+            border-radius: 8px;
+            box-shadow: 0 1px 5px rgba(0,0,0,.08);
+            padding: 1.35rem 2rem 1.35rem;
+        }}
+
+        .score-alert {{
+            background: #fff8e1;
+            border: 1px solid #f0d27a;
+            border-radius: 6px;
+            color: #5b4300;
+            font-size: .95rem;
+            font-weight: 800;
+            margin: .75rem 0 1rem;
+            padding: .85rem 1rem;
+        }}
+
+        .score-card-title {{
+            color: var(--ink);
+            font-size: 1.02rem;
+            font-weight: 900;
+            margin: 0 0 .3rem;
+        }}
+
+        .score-card-meta {{
+            color: #4d4d4d;
+            font-size: .9rem;
+            margin: 0;
+        }}
+
+        .score-status {{
+            border-radius: 999px;
+            display: inline-block;
+            font-size: .78rem;
+            font-weight: 900;
+            padding: .25rem .62rem;
+            text-transform: uppercase;
+        }}
+
+        .score-status.attached {{
+            background: #e6f5ec;
+            color: #0d5d32;
+        }}
+
+        .score-status.empty {{
+            background: #f1f1f1;
+            color: #575757;
+        }}
+
+        .score-summary {{
+            background: #f6faf7;
+            border: 1px solid #dce8df;
+            border-radius: 8px;
+            margin-top: 1rem;
+            padding: 1rem;
+        }}
+
+        .score-summary h3 {{
+            color: var(--ink);
+            font-size: 1.05rem;
+            margin: 0 0 .65rem;
+        }}
+
+        div[data-testid="stNumberInput"] label,
+        div[data-testid="stFileUploader"] label {{
+            color: var(--ink);
+            font-size: .92rem;
+            font-weight: 800;
         }}
 
         .registration-page {{
@@ -1137,7 +1296,7 @@ def render_user_menu() -> None:
         items = [
             ("Home", "⌂", "Home"),
             ("Meu Cadastro", "◉", "Meu Cadastro"),
-            ("Minha Pontuação", "♕", "Minha Pontuação"),
+            ("Sua inscrição", "♕", "Minha Pontuação"),
         ]
 
     links = ""
@@ -1423,19 +1582,138 @@ def page_meu_cadastro(user: dict[str, str]) -> None:
 
 
 def page_minha_pontuacao(user: dict[str, str]) -> None:
-    render_logged_header("Minha Pontuação &gt; <strong>Resumo da Avaliação</strong>")
-    st.markdown('<p class="section-title">Minha Pontuação</p>', unsafe_allow_html=True)
+    render_logged_header("Sua inscrição &gt; <strong>Pontuação e comprovantes</strong>")
+    st.markdown('<div class="score-page">', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">Sua inscrição</p>', unsafe_allow_html=True)
+
+    modalidade = st.selectbox(
+        "Modalidade",
+        MODALIDADES_INSCRICAO,
+        index=0,
+        key="inscricao_modalidade",
+    )
+
     st.markdown(
-        """
-        <div class="placeholder-card">
-            <p style="margin:0;color:#575757;">
-                A pontuação ainda não foi configurada. Na próxima etapa podemos criar a tela
-                com os critérios do edital e o status da avaliação.
-            </p>
-        </div>
-        """,
+        '<div class="score-alert">Lattes não é aceito como comprovante.</div>',
         unsafe_allow_html=True,
     )
+
+    itens = QUADROS_INSCRICAO.get(modalidade, [])
+    if not itens:
+        st.info("Quadro em preparação. A estrutura já está pronta para adicionar os critérios desta modalidade.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    declaracao = st.file_uploader(
+        "Declaração de Disponibilidade",
+        type=["pdf"],
+        key=f"inscricao_{modalidade}_declaracao_disponibilidade",
+        help="Upload obrigatório em PDF.",
+    )
+
+    total = 0.0
+    itens_pontuados = []
+    itens_sem_pdf = []
+    itens_com_pdf = []
+
+    for index, item in enumerate(itens, start=1):
+        with st.container(border=True):
+            st.markdown(
+                f"""
+                <p class="score-card-title">{index}. {item["criterio"]}</p>
+                <p class="score-card-meta"><strong>Regra:</strong> {item["regra"]}</p>
+                <p class="score-card-meta"><strong>Pontuação máxima:</strong> {item["maximo"]:g} pts</p>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            col_score, col_file, col_status = st.columns([1, 1.55, .8])
+            score_key = f"inscricao_{modalidade}_{item['id']}_pontuacao"
+            file_key = f"inscricao_{modalidade}_{item['id']}_pdf"
+
+            with col_score:
+                pontuacao = st.number_input(
+                    "Pontuação solicitada",
+                    min_value=0.0,
+                    max_value=float(item["maximo"]),
+                    value=0.0,
+                    step=0.1,
+                    key=score_key,
+                )
+            with col_file:
+                arquivo = st.file_uploader(
+                    "Comprovante em PDF",
+                    type=["pdf"],
+                    key=file_key,
+                    label_visibility="visible",
+                )
+            with col_status:
+                status_class = "attached" if arquivo else "empty"
+                status_label = "Anexado" if arquivo else "Sem arquivo"
+                st.markdown(
+                    f'<span class="score-status {status_class}">{status_label}</span>',
+                    unsafe_allow_html=True,
+                )
+
+        total += pontuacao
+        if pontuacao > 0:
+            itens_pontuados.append(item["criterio"])
+            if arquivo:
+                itens_com_pdf.append(item["criterio"])
+            else:
+                itens_sem_pdf.append(item["criterio"])
+        elif arquivo:
+            itens_com_pdf.append(item["criterio"])
+
+    pontos_suficientes = total >= 10
+    itens_suficientes = len(itens_pontuados) >= 2
+    comprovantes_ok = not itens_sem_pdf
+    declaracao_ok = declaracao is not None
+    completo = pontos_suficientes and itens_suficientes and comprovantes_ok and declaracao_ok
+
+    st.markdown('<div class="score-summary">', unsafe_allow_html=True)
+    st.markdown("<h3>Resumo final</h3>", unsafe_allow_html=True)
+
+    col_total, col_status = st.columns([1, 1])
+    with col_total:
+        st.metric("Pontuação total", f"{total:.1f} pts")
+    with col_status:
+        if completo:
+            st.success("Status: completo")
+        else:
+            st.warning("Status: pendente")
+
+    st.write("Itens com pontuação sem PDF:")
+    if itens_sem_pdf:
+        for criterio in itens_sem_pdf:
+            st.write(f"- {criterio}")
+    else:
+        st.write("- Nenhum")
+
+    st.write("Itens com PDF anexado:")
+    if itens_com_pdf:
+        for criterio in itens_com_pdf:
+            st.write(f"- {criterio}")
+    else:
+        st.write("- Nenhum")
+
+    pendencias = []
+    if not pontos_suficientes:
+        pendencias.append("mínimo de 10 pontos")
+    if not itens_suficientes:
+        pendencias.append("pelo menos 2 itens pontuados")
+    if not comprovantes_ok:
+        pendencias.append("todo item pontuado precisa ter PDF")
+    if not declaracao_ok:
+        pendencias.append("upload obrigatório da Declaração de Disponibilidade")
+
+    if pendencias:
+        st.write("Pendências:")
+        for pendencia in pendencias:
+            st.write(f"- {pendencia}")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def page_administracao(user: dict[str, str]) -> None:
