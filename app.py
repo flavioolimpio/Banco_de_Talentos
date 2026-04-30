@@ -201,6 +201,17 @@ def inject_css(show_sidebar: bool = False) -> None:
                 overflow: hidden;
             }
 
+            div[data-testid="column"]:has(.fixed-menu) {
+                align-self: stretch;
+                background: #2c363f;
+                border-radius: 8px;
+                min-height: calc(100vh - 1.5rem);
+            }
+
+            div[data-testid="column"]:has(.fixed-menu) > div {
+                height: 100%;
+            }
+
             .fixed-menu {
                 background: #2c363f;
                 border-radius: 8px;
