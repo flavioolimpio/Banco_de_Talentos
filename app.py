@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import csv
 import hashlib
+import os
 import secrets
 import sqlite3
 from datetime import datetime
@@ -22,9 +23,10 @@ APP_TITLE = "Banco de Talentos - Polo de Inovação IFG"
 LOGO_PATH = Path("imagens/logo-ifg-vertical.png")
 HOME_IMAGE_PATH = Path("imagens/home.png")
 FAVICON_PATH = Path("imagens/favicon.png")
-DATA_DIR = Path("data")
+DATA_DIR = Path(os.getenv("BANCO_TALENTOS_DATA_DIR", "data"))
 USERS_FILE = DATA_DIR / "usuarios.csv"
 DB_FILE = DATA_DIR / "banco_talentos.db"
+COMPROVANTES_DIR = DATA_DIR / "comprovantes"
 LIME = "#d6f000"
 GREEN = "#168241"
 INK = "#202124"
@@ -849,14 +851,15 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 
 def db_connection() -> sqlite3.Connection:
-    DATA_DIR.mkdir(exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def ensure_users_file() -> None:
-    DATA_DIR.mkdir(exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    COMPROVANTES_DIR.mkdir(parents=True, exist_ok=True)
     with db_connection() as conn:
         conn.execute(
             """
@@ -900,20 +903,52 @@ def ensure_users_file() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS inscricoes (
+                cpf TEXT PRIMARY KEY,
+                modalidade TEXT NOT NULL,
+                total REAL DEFAULT 0,
+                status TEXT DEFAULT 'pendente',
+                declaracao_path TEXT DEFAULT '',
+                declaracao_nome TEXT DEFAULT '',
+                atualizado_em TEXT DEFAULT '',
+                FOREIGN KEY (cpf) REFERENCES usuarios(cpf)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS inscricao_itens (
+                cpf TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                modalidade TEXT NOT NULL,
+                criterio TEXT NOT NULL,
+                regra TEXT DEFAULT '',
+                maximo REAL DEFAULT 0,
+                pontuacao REAL DEFAULT 0,
+                arquivo_path TEXT DEFAULT '',
+                arquivo_nome TEXT DEFAULT '',
+                atualizado_em TEXT DEFAULT '',
+                PRIMARY KEY (cpf, item_id),
+                FOREIGN KEY (cpf) REFERENCES usuarios(cpf)
+            )
+            """
+        )
 
     users = read_users()
     if not any(user["cpf"] == "admim" for user in users):
         append_user(
             {
                 "cpf": "admim",
-                "nome": "Usuário Teste",
+                "nome": "Administrador",
                 "email": "admim@ifg.edu.br",
                 "telefone": "",
                 "senha_hash": password_hash("admim"),
-                "vinculo": "Colaborador Externo",
+                "vinculo": "Administrador",
                 "instituicao": "Polo de Inovação IFG",
                 "lattes": "",
-                "resumo": "Usuário temporário para testes da área logada.",
+                "resumo": "Conta administrativa para gestão da plataforma.",
                 "perfil": "admin",
                 "data_cadastro": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "aceite_lgpd": "sim",
@@ -921,8 +956,16 @@ def ensure_users_file() -> None:
         )
     else:
         admim = find_user("admim")
-        if admim and admim.get("perfil") != "admin":
-            update_user("admim", {"perfil": "admin", "vinculo": "Colaborador Externo"})
+        if admim:
+            update_user(
+                "admim",
+                {
+                    "nome": "Administrador",
+                    "perfil": "admin",
+                    "vinculo": "Administrador",
+                    "resumo": "Conta administrativa para gestão da plataforma.",
+                },
+            )
 
 
 def read_users() -> list[dict[str, str]]:
@@ -931,6 +974,22 @@ def read_users() -> list[dict[str, str]]:
 
     with db_connection() as conn:
         rows = conn.execute("SELECT * FROM usuarios ORDER BY data_cadastro DESC").fetchall()
+    return [dict(row) for row in rows]
+
+
+def read_candidate_users() -> list[dict[str, str]]:
+    if not DB_FILE.exists():
+        return []
+
+    with db_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM usuarios
+            WHERE perfil IS NULL OR perfil != 'admin'
+            ORDER BY data_cadastro DESC
+            """
+        ).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -1013,8 +1072,154 @@ def update_user(cpf: str, values: dict[str, str]) -> dict[str, str] | None:
     return find_user(cpf)
 
 
+def safe_file_stem(value: str) -> str:
+    cleaned = "".join(char for char in str(value) if char.isalnum() or char in ("-", "_"))
+    return cleaned or "sem_identificacao"
+
+
+def save_pdf_upload(cpf: str, item_id: str, uploaded_file) -> tuple[str, str]:
+    cpf_dir = COMPROVANTES_DIR / safe_file_stem(cpf)
+    cpf_dir.mkdir(parents=True, exist_ok=True)
+    file_path = cpf_dir / f"{safe_file_stem(item_id)}.pdf"
+    file_path.write_bytes(uploaded_file.getbuffer())
+    return str(file_path), uploaded_file.name
+
+
+def read_inscricao(cpf: str) -> dict[str, object]:
+    if not cpf or not DB_FILE.exists():
+        return {"inscricao": {}, "itens": {}}
+
+    with db_connection() as conn:
+        inscricao = conn.execute("SELECT * FROM inscricoes WHERE cpf = ?", (cpf,)).fetchone()
+        rows = conn.execute("SELECT * FROM inscricao_itens WHERE cpf = ?", (cpf,)).fetchall()
+
+    return {
+        "inscricao": dict(inscricao) if inscricao else {},
+        "itens": {row["item_id"]: dict(row) for row in rows},
+    }
+
+
+def save_inscricao(
+    cpf: str,
+    modalidade: str,
+    total: float,
+    status: str,
+    declaracao,
+    items_payload: list[dict[str, object]],
+) -> None:
+    saved = read_inscricao(cpf)
+    saved_inscricao = saved.get("inscricao", {})
+    saved_items = saved.get("itens", {})
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    declaracao_path = str(saved_inscricao.get("declaracao_path", "") or "")
+    declaracao_nome = str(saved_inscricao.get("declaracao_nome", "") or "")
+    if declaracao is not None:
+        declaracao_path, declaracao_nome = save_pdf_upload(cpf, "declaracao_disponibilidade", declaracao)
+
+    with db_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO inscricoes (cpf, modalidade, total, status, declaracao_path, declaracao_nome, atualizado_em)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(cpf) DO UPDATE SET
+                modalidade = excluded.modalidade,
+                total = excluded.total,
+                status = excluded.status,
+                declaracao_path = excluded.declaracao_path,
+                declaracao_nome = excluded.declaracao_nome,
+                atualizado_em = excluded.atualizado_em
+            """,
+            (cpf, modalidade, total, status, declaracao_path, declaracao_nome, now),
+        )
+
+        for item in items_payload:
+            item_id = str(item["item_id"])
+            saved_item = saved_items.get(item_id, {})
+            arquivo_path = str(saved_item.get("arquivo_path", "") or "")
+            arquivo_nome = str(saved_item.get("arquivo_nome", "") or "")
+            uploaded = item.get("arquivo")
+            if uploaded is not None:
+                arquivo_path, arquivo_nome = save_pdf_upload(cpf, item_id, uploaded)
+
+            conn.execute(
+                """
+                INSERT INTO inscricao_itens (
+                    cpf, item_id, modalidade, criterio, regra, maximo, pontuacao,
+                    arquivo_path, arquivo_nome, atualizado_em
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(cpf, item_id) DO UPDATE SET
+                    modalidade = excluded.modalidade,
+                    criterio = excluded.criterio,
+                    regra = excluded.regra,
+                    maximo = excluded.maximo,
+                    pontuacao = excluded.pontuacao,
+                    arquivo_path = excluded.arquivo_path,
+                    arquivo_nome = excluded.arquivo_nome,
+                    atualizado_em = excluded.atualizado_em
+                """,
+                (
+                    cpf,
+                    item_id,
+                    modalidade,
+                    str(item["criterio"]),
+                    str(item["regra"]),
+                    float(item["maximo"]),
+                    float(item["pontuacao"]),
+                    arquivo_path,
+                    arquivo_nome,
+                    now,
+                ),
+            )
+
+
+def read_admin_inscricoes() -> list[dict[str, object]]:
+    if not DB_FILE.exists():
+        return []
+
+    with db_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                inscricoes.cpf,
+                usuarios.nome,
+                usuarios.email,
+                inscricoes.modalidade,
+                inscricoes.total,
+                inscricoes.status,
+                inscricoes.declaracao_path,
+                inscricoes.declaracao_nome,
+                inscricoes.atualizado_em
+            FROM inscricoes
+            LEFT JOIN usuarios ON usuarios.cpf = inscricoes.cpf
+            ORDER BY inscricoes.atualizado_em DESC
+            """
+        ).fetchall()
+
+        results = []
+        for row in rows:
+            item_rows = conn.execute(
+                """
+                SELECT *
+                FROM inscricao_itens
+                WHERE cpf = ?
+                ORDER BY item_id
+                """,
+                (row["cpf"],),
+            ).fetchall()
+            item_dicts = [dict(item) for item in item_rows]
+            result = dict(row)
+            result["itens"] = item_dicts
+            result["itens_pontuados"] = sum(1 for item in item_dicts if float(item.get("pontuacao") or 0) > 0)
+            result["pdfs_anexados"] = sum(1 for item in item_dicts if item.get("arquivo_path"))
+            results.append(result)
+
+    return results
+
+
 def users_to_csv() -> str:
-    rows = read_users()
+    rows = read_candidate_users()
     public_fields = [field for field in USER_FIELDS if field != "senha_hash"]
     output = StringIO()
     writer = csv.DictWriter(output, fieldnames=public_fields)
@@ -1295,10 +1500,12 @@ def logout() -> None:
 
 def render_user_menu() -> None:
     user = st.session_state.get("authenticated_user", {})
-    name = user.get("nome", "Usuário")
-    role = user.get("vinculo", "Colaborador/a Externo/a")
-    if role == "Administrador":
-        role = "Colaborador/a Externo/a"
+    if user.get("perfil") == "admin":
+        name = "Administrador"
+        role = "Área administrativa"
+    else:
+        name = user.get("nome", "Usuário")
+        role = user.get("vinculo", "Colaborador/a Externo/a")
 
     active = st.session_state.get("user_menu", "Administração" if user.get("perfil") == "admin" else "Home")
     if user.get("perfil") == "admin":
@@ -1597,10 +1804,16 @@ def page_minha_pontuacao(user: dict[str, str]) -> None:
     st.markdown('<div class="score-page">', unsafe_allow_html=True)
     st.markdown('<p class="section-title">Sua inscrição</p>', unsafe_allow_html=True)
 
+    cpf = user.get("cpf", "")
+    saved_data = read_inscricao(cpf)
+    saved_inscricao = saved_data.get("inscricao", {})
+    saved_items = saved_data.get("itens", {})
+    modalidade_salva = saved_inscricao.get("modalidade", "Servidor")
+
     modalidade = st.selectbox(
         "Modalidade",
         MODALIDADES_INSCRICAO,
-        index=0,
+        index=MODALIDADES_INSCRICAO.index(modalidade_salva) if modalidade_salva in MODALIDADES_INSCRICAO else 0,
         key="inscricao_modalidade",
     )
 
@@ -1621,13 +1834,21 @@ def page_minha_pontuacao(user: dict[str, str]) -> None:
         key=f"inscricao_{modalidade}_declaracao_disponibilidade",
         help="Upload obrigatório em PDF.",
     )
+    declaracao_salva = bool(saved_inscricao.get("declaracao_path"))
+    if declaracao_salva and declaracao is None:
+        st.caption(f"Declaração já salva: {saved_inscricao.get('declaracao_nome') or 'arquivo PDF'}")
 
     total = 0.0
     itens_pontuados = []
     itens_sem_pdf = []
     itens_com_pdf = []
+    items_payload = []
 
     for index, item in enumerate(itens, start=1):
+        saved_item = saved_items.get(item["id"], {})
+        saved_score = min(float(saved_item.get("pontuacao") or 0), float(item["maximo"]))
+        saved_file = bool(saved_item.get("arquivo_path"))
+
         with st.container(border=True):
             st.markdown(
                 f"""
@@ -1647,7 +1868,7 @@ def page_minha_pontuacao(user: dict[str, str]) -> None:
                     "Pontuação solicitada",
                     min_value=0.0,
                     max_value=float(item["maximo"]),
-                    value=0.0,
+                    value=saved_score,
                     step=0.1,
                     key=score_key,
                 )
@@ -1659,28 +1880,44 @@ def page_minha_pontuacao(user: dict[str, str]) -> None:
                     label_visibility="visible",
                 )
             with col_status:
-                status_class = "attached" if arquivo else "empty"
-                status_label = "Anexado" if arquivo else "Sem arquivo"
+                has_file = arquivo is not None or saved_file
+                status_class = "attached" if has_file else "empty"
+                status_label = "Anexado" if has_file else "Sem arquivo"
                 st.markdown(
                     f'<span class="score-status {status_class}">{status_label}</span>',
                     unsafe_allow_html=True,
                 )
+                if saved_file and arquivo is None:
+                    st.caption("PDF salvo")
 
         total += pontuacao
+        has_file = arquivo is not None or saved_file
         if pontuacao > 0:
             itens_pontuados.append(item["criterio"])
-            if arquivo:
+            if has_file:
                 itens_com_pdf.append(item["criterio"])
             else:
                 itens_sem_pdf.append(item["criterio"])
-        elif arquivo:
+        elif has_file:
             itens_com_pdf.append(item["criterio"])
+
+        items_payload.append(
+            {
+                "item_id": item["id"],
+                "criterio": item["criterio"],
+                "regra": item["regra"],
+                "maximo": item["maximo"],
+                "pontuacao": pontuacao,
+                "arquivo": arquivo,
+            }
+        )
 
     pontos_suficientes = total >= 10
     itens_suficientes = len(itens_pontuados) >= 2
     comprovantes_ok = not itens_sem_pdf
-    declaracao_ok = declaracao is not None
+    declaracao_ok = declaracao is not None or declaracao_salva
     completo = pontos_suficientes and itens_suficientes and comprovantes_ok and declaracao_ok
+    status_inscricao = "completo" if completo else "pendente"
 
     st.markdown('<div class="score-summary">', unsafe_allow_html=True)
     st.markdown("<h3>Resumo final</h3>", unsafe_allow_html=True)
@@ -1723,6 +1960,18 @@ def page_minha_pontuacao(user: dict[str, str]) -> None:
         for pendencia in pendencias:
             st.write(f"- {pendencia}")
 
+    if st.button("Salvar inscrição", type="primary", use_container_width=True):
+        save_inscricao(
+            cpf=cpf,
+            modalidade=modalidade,
+            total=total,
+            status=status_inscricao,
+            declaracao=declaracao,
+            items_payload=items_payload,
+        )
+        st.success("Inscrição salva com sucesso.")
+        st.rerun()
+
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1733,20 +1982,91 @@ def page_administracao(user: dict[str, str]) -> None:
         st.rerun()
 
     render_logged_header("Administração &gt; <strong>Cadastros recebidos</strong>")
-    users = read_users()
+    users = read_candidate_users()
+    inscricoes = read_admin_inscricoes()
     public_fields = [field for field in USER_FIELDS if field != "senha_hash"]
     rows = [{field: item.get(field, "") for field in public_fields} for item in users]
 
     total = len(rows)
     completos = sum(1 for row in rows if row.get("nivel_formacao") and row.get("cep"))
+    inscricoes_completas = sum(1 for item in inscricoes if item.get("status") == "completo")
     st.markdown(
         f"""
         <div class="placeholder-card">
-            <p style="margin:0;"><strong>{total}</strong> cadastro(s) recebido(s) · <strong>{completos}</strong> com endereço e formação preenchidos</p>
+            <p style="margin:0;"><strong>{total}</strong> cadastro(s) recebido(s) · <strong>{completos}</strong> com endereço e formação preenchidos · <strong>{len(inscricoes)}</strong> inscrição(ões) salva(s) · <strong>{inscricoes_completas}</strong> completa(s)</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    st.caption(f"Banco em uso: {DB_FILE}")
+
+    st.markdown('<p class="section-title">Inscrições salvas</p>', unsafe_allow_html=True)
+    if inscricoes:
+        resumo_inscricoes = [
+            {
+                "cpf": item.get("cpf", ""),
+                "nome": item.get("nome", ""),
+                "email": item.get("email", ""),
+                "modalidade": item.get("modalidade", ""),
+                "pontuação_total": float(item.get("total") or 0),
+                "status": item.get("status", ""),
+                "itens_pontuados": item.get("itens_pontuados", 0),
+                "pdfs_anexados": item.get("pdfs_anexados", 0),
+                "declaração": "sim" if item.get("declaracao_path") else "não",
+                "atualizado_em": item.get("atualizado_em", ""),
+            }
+            for item in inscricoes
+        ]
+        st.dataframe(resumo_inscricoes, use_container_width=True, hide_index=True)
+
+        for inscricao in inscricoes:
+            nome = inscricao.get("nome") or "Sem nome"
+            cpf = inscricao.get("cpf", "")
+            total_inscricao = float(inscricao.get("total") or 0)
+            with st.expander(f"{nome} · {cpf} · {total_inscricao:.1f} pts · {inscricao.get('status', 'pendente')}"):
+                st.write(f"Modalidade: {inscricao.get('modalidade', '')}")
+                st.write(f"Atualizado em: {inscricao.get('atualizado_em', '')}")
+
+                declaracao_path_value = str(inscricao.get("declaracao_path") or "")
+                declaracao_path = Path(declaracao_path_value)
+                if declaracao_path_value and declaracao_path.exists():
+                    st.download_button(
+                        "Baixar Declaração de Disponibilidade",
+                        declaracao_path.read_bytes(),
+                        declaracao_path.name,
+                        "application/pdf",
+                        key=f"download_declaracao_{cpf}",
+                        use_container_width=True,
+                    )
+
+                detalhe_itens = [
+                    {
+                        "critério": item.get("criterio", ""),
+                        "pontuação": float(item.get("pontuacao") or 0),
+                        "máximo": float(item.get("maximo") or 0),
+                        "pdf": "sim" if item.get("arquivo_path") else "não",
+                    }
+                    for item in inscricao.get("itens", [])
+                    if float(item.get("pontuacao") or 0) > 0 or item.get("arquivo_path")
+                ]
+                st.dataframe(detalhe_itens, use_container_width=True, hide_index=True)
+
+                for item in inscricao.get("itens", []):
+                    arquivo_path_value = str(item.get("arquivo_path") or "")
+                    arquivo_path = Path(arquivo_path_value)
+                    if arquivo_path_value and arquivo_path.exists():
+                        st.download_button(
+                            f"Baixar PDF - {item.get('criterio', '')}",
+                            arquivo_path.read_bytes(),
+                            arquivo_path.name,
+                            "application/pdf",
+                            key=f"download_{cpf}_{item.get('item_id', '')}",
+                            use_container_width=True,
+                        )
+    else:
+        st.info("Nenhuma inscrição salva até o momento.")
+
+    st.markdown('<p class="section-title">Cadastros</p>', unsafe_allow_html=True)
     st.dataframe(rows, use_container_width=True, hide_index=True)
     st.download_button(
         "Baixar cadastros em CSV",
