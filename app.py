@@ -82,6 +82,7 @@ CNPQ_AREAS = [
 ]
 
 MODALIDADES_INSCRICAO = ["Servidor", "Estudante", "Colaborador Externo"]
+TIPOS_SERVIDOR = ["Pesquisador", "Apoio técnico"]
 
 QUADROS_INSCRICAO = {
     "Servidor": [
@@ -857,6 +858,12 @@ def db_connection() -> sqlite3.Connection:
     return conn
 
 
+def ensure_db_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    existing_columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in existing_columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def ensure_users_file() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     COMPROVANTES_DIR.mkdir(parents=True, exist_ok=True)
@@ -910,8 +917,11 @@ def ensure_users_file() -> None:
                 modalidade TEXT NOT NULL,
                 total REAL DEFAULT 0,
                 status TEXT DEFAULT 'pendente',
+                tipo_servidor TEXT DEFAULT '',
                 declaracao_path TEXT DEFAULT '',
                 declaracao_nome TEXT DEFAULT '',
+                comprovantes_pdf_path TEXT DEFAULT '',
+                comprovantes_pdf_nome TEXT DEFAULT '',
                 atualizado_em TEXT DEFAULT '',
                 FOREIGN KEY (cpf) REFERENCES usuarios(cpf)
             )
@@ -935,6 +945,9 @@ def ensure_users_file() -> None:
             )
             """
         )
+        ensure_db_column(conn, "inscricoes", "tipo_servidor", "TEXT DEFAULT ''")
+        ensure_db_column(conn, "inscricoes", "comprovantes_pdf_path", "TEXT DEFAULT ''")
+        ensure_db_column(conn, "inscricoes", "comprovantes_pdf_nome", "TEXT DEFAULT ''")
 
     users = read_users()
     if not any(user["cpf"] == "admim" for user in users):
@@ -1085,6 +1098,17 @@ def save_pdf_upload(cpf: str, item_id: str, uploaded_file) -> tuple[str, str]:
     return str(file_path), uploaded_file.name
 
 
+def modalidade_from_user(user: dict[str, str]) -> str:
+    vinculo = str(user.get("vinculo", "") or "").strip().lower()
+    if "estudante" in vinculo:
+        return "Estudante"
+    if "servidor" in vinculo:
+        return "Servidor"
+    if "colaborador" in vinculo:
+        return "Colaborador Externo"
+    return "Colaborador Externo"
+
+
 def read_inscricao(cpf: str) -> dict[str, object]:
     if not cpf or not DB_FILE.exists():
         return {"inscricao": {}, "itens": {}}
@@ -1102,46 +1126,59 @@ def read_inscricao(cpf: str) -> dict[str, object]:
 def save_inscricao(
     cpf: str,
     modalidade: str,
+    tipo_servidor: str,
+    comprovantes_item_id: str,
     total: float,
     status: str,
-    declaracao,
+    comprovantes_pdf,
     items_payload: list[dict[str, object]],
 ) -> None:
     saved = read_inscricao(cpf)
     saved_inscricao = saved.get("inscricao", {})
-    saved_items = saved.get("itens", {})
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     declaracao_path = str(saved_inscricao.get("declaracao_path", "") or "")
     declaracao_nome = str(saved_inscricao.get("declaracao_nome", "") or "")
-    if declaracao is not None:
-        declaracao_path, declaracao_nome = save_pdf_upload(cpf, "declaracao_disponibilidade", declaracao)
+    comprovantes_pdf_path = str(saved_inscricao.get("comprovantes_pdf_path", "") or "")
+    comprovantes_pdf_nome = str(saved_inscricao.get("comprovantes_pdf_nome", "") or "")
+    if comprovantes_pdf is not None:
+        comprovantes_pdf_path, comprovantes_pdf_nome = save_pdf_upload(cpf, comprovantes_item_id, comprovantes_pdf)
 
     with db_connection() as conn:
         conn.execute(
             """
-            INSERT INTO inscricoes (cpf, modalidade, total, status, declaracao_path, declaracao_nome, atualizado_em)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO inscricoes (
+                cpf, modalidade, tipo_servidor, total, status, declaracao_path, declaracao_nome,
+                comprovantes_pdf_path, comprovantes_pdf_nome, atualizado_em
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(cpf) DO UPDATE SET
                 modalidade = excluded.modalidade,
+                tipo_servidor = excluded.tipo_servidor,
                 total = excluded.total,
                 status = excluded.status,
                 declaracao_path = excluded.declaracao_path,
                 declaracao_nome = excluded.declaracao_nome,
+                comprovantes_pdf_path = excluded.comprovantes_pdf_path,
+                comprovantes_pdf_nome = excluded.comprovantes_pdf_nome,
                 atualizado_em = excluded.atualizado_em
             """,
-            (cpf, modalidade, total, status, declaracao_path, declaracao_nome, now),
+            (
+                cpf,
+                modalidade,
+                tipo_servidor,
+                total,
+                status,
+                declaracao_path,
+                declaracao_nome,
+                comprovantes_pdf_path,
+                comprovantes_pdf_nome,
+                now,
+            ),
         )
 
         for item in items_payload:
             item_id = str(item["item_id"])
-            saved_item = saved_items.get(item_id, {})
-            arquivo_path = str(saved_item.get("arquivo_path", "") or "")
-            arquivo_nome = str(saved_item.get("arquivo_nome", "") or "")
-            uploaded = item.get("arquivo")
-            if uploaded is not None:
-                arquivo_path, arquivo_nome = save_pdf_upload(cpf, item_id, uploaded)
-
             conn.execute(
                 """
                 INSERT INTO inscricao_itens (
@@ -1167,8 +1204,8 @@ def save_inscricao(
                     str(item["regra"]),
                     float(item["maximo"]),
                     float(item["pontuacao"]),
-                    arquivo_path,
-                    arquivo_nome,
+                    "",
+                    "",
                     now,
                 ),
             )
@@ -1186,10 +1223,13 @@ def read_admin_inscricoes() -> list[dict[str, object]]:
                 usuarios.nome,
                 usuarios.email,
                 inscricoes.modalidade,
+                inscricoes.tipo_servidor,
                 inscricoes.total,
                 inscricoes.status,
                 inscricoes.declaracao_path,
                 inscricoes.declaracao_nome,
+                inscricoes.comprovantes_pdf_path,
+                inscricoes.comprovantes_pdf_nome,
                 inscricoes.atualizado_em
             FROM inscricoes
             LEFT JOIN usuarios ON usuarios.cpf = inscricoes.cpf
@@ -1212,7 +1252,7 @@ def read_admin_inscricoes() -> list[dict[str, object]]:
             result = dict(row)
             result["itens"] = item_dicts
             result["itens_pontuados"] = sum(1 for item in item_dicts if float(item.get("pontuacao") or 0) > 0)
-            result["pdfs_anexados"] = sum(1 for item in item_dicts if item.get("arquivo_path"))
+            result["pdfs_anexados"] = 1 if result.get("comprovantes_pdf_path") else 0
             results.append(result)
 
     return results
@@ -1801,68 +1841,74 @@ def page_meu_cadastro(user: dict[str, str]) -> None:
 
 def page_minha_pontuacao(user: dict[str, str]) -> None:
     render_logged_header("Sua inscrição &gt; <strong>Pontuação e comprovantes</strong>")
-    st.markdown('<div class="score-page">', unsafe_allow_html=True)
     st.markdown('<p class="section-title">Sua inscrição</p>', unsafe_allow_html=True)
+
+    if st.session_state.pop("inscricao_salva_feedback", False):
+        st.success("Inscrição salva com sucesso. O PDF e a pontuação foram registrados.")
+        st.toast("Inscrição salva com sucesso.", icon="✅")
 
     cpf = user.get("cpf", "")
     saved_data = read_inscricao(cpf)
     saved_inscricao = saved_data.get("inscricao", {})
     saved_items = saved_data.get("itens", {})
-    modalidade_salva = saved_inscricao.get("modalidade", "Servidor")
+    modalidade = modalidade_from_user(user)
+    tipo_servidor = ""
+    quadro_label = "Quadro 1"
 
-    modalidade = st.selectbox(
-        "Modalidade",
-        MODALIDADES_INSCRICAO,
-        index=MODALIDADES_INSCRICAO.index(modalidade_salva) if modalidade_salva in MODALIDADES_INSCRICAO else 0,
-        key="inscricao_modalidade",
-    )
+    st.caption(f"Modalidade definida pelo cadastro: {modalidade}")
+    if modalidade == "Servidor":
+        tipo_salvo = saved_inscricao.get("tipo_servidor", "Pesquisador")
+        tipo_servidor = st.radio(
+            "Categoria do servidor",
+            TIPOS_SERVIDOR,
+            index=TIPOS_SERVIDOR.index(tipo_salvo) if tipo_salvo in TIPOS_SERVIDOR else 0,
+            horizontal=True,
+            key="inscricao_tipo_servidor",
+        )
+        quadro_label = "Quadro 1" if tipo_servidor == "Pesquisador" else "Quadro 2"
+        st.caption(f"{tipo_servidor}: usar {quadro_label}. Por enquanto os itens dos quadros estão iguais para teste.")
 
     st.markdown(
-        '<div class="score-alert">Lattes não é aceito como comprovante.</div>',
+        f'<div class="score-alert">Lattes não é aceito como comprovante. Anexe um único PDF com os documentos na ordem do {quadro_label}.</div>',
         unsafe_allow_html=True,
     )
 
     itens = QUADROS_INSCRICAO.get(modalidade, [])
     if not itens:
         st.info("Quadro em preparação. A estrutura já está pronta para adicionar os critérios desta modalidade.")
-        st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    declaracao = st.file_uploader(
-        "Declaração de Disponibilidade",
+    comprovantes_pdf = st.file_uploader(
+        "PDF único da inscrição",
         type=["pdf"],
-        key=f"inscricao_{modalidade}_declaracao_disponibilidade",
-        help="Upload obrigatório em PDF.",
+        key=f"inscricao_{modalidade}_{tipo_servidor}_comprovantes_{quadro_label}",
+        help=f"Envie um único PDF com todos os comprovantes, organizados na mesma ordem dos itens do {quadro_label}.",
     )
-    declaracao_salva = bool(saved_inscricao.get("declaracao_path"))
-    if declaracao_salva and declaracao is None:
-        st.caption(f"Declaração já salva: {saved_inscricao.get('declaracao_nome') or 'arquivo PDF'}")
+    comprovantes_pdf_salvo = bool(saved_inscricao.get("comprovantes_pdf_path"))
+    if comprovantes_pdf_salvo and comprovantes_pdf is None:
+        st.caption(f"PDF já salvo: {saved_inscricao.get('comprovantes_pdf_nome') or 'comprovantes_quadro_1.pdf'}")
 
     total = 0.0
     itens_pontuados = []
-    itens_sem_pdf = []
-    itens_com_pdf = []
     items_payload = []
 
     for index, item in enumerate(itens, start=1):
         saved_item = saved_items.get(item["id"], {})
         saved_score = min(float(saved_item.get("pontuacao") or 0), float(item["maximo"]))
-        saved_file = bool(saved_item.get("arquivo_path"))
 
         with st.container(border=True):
-            st.markdown(
-                f"""
-                <p class="score-card-title">{index}. {item["criterio"]}</p>
-                <p class="score-card-meta"><strong>Regra:</strong> {item["regra"]}</p>
-                <p class="score-card-meta"><strong>Pontuação máxima:</strong> {item["maximo"]:g} pts</p>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            col_score, col_file, col_status = st.columns([1, 1.55, .8])
+            col_info, col_score = st.columns([2.3, 1])
             score_key = f"inscricao_{modalidade}_{item['id']}_pontuacao"
-            file_key = f"inscricao_{modalidade}_{item['id']}_pdf"
 
+            with col_info:
+                st.markdown(
+                    f"""
+                    <p class="score-card-title">{index}. {item["criterio"]}</p>
+                    <p class="score-card-meta"><strong>Regra:</strong> {item["regra"]}</p>
+                    <p class="score-card-meta"><strong>Pontuação máxima:</strong> {item["maximo"]:g} pts</p>
+                    """,
+                    unsafe_allow_html=True,
+                )
             with col_score:
                 pontuacao = st.number_input(
                     "Pontuação solicitada",
@@ -1872,34 +1918,10 @@ def page_minha_pontuacao(user: dict[str, str]) -> None:
                     step=0.1,
                     key=score_key,
                 )
-            with col_file:
-                arquivo = st.file_uploader(
-                    "Comprovante em PDF",
-                    type=["pdf"],
-                    key=file_key,
-                    label_visibility="visible",
-                )
-            with col_status:
-                has_file = arquivo is not None or saved_file
-                status_class = "attached" if has_file else "empty"
-                status_label = "Anexado" if has_file else "Sem arquivo"
-                st.markdown(
-                    f'<span class="score-status {status_class}">{status_label}</span>',
-                    unsafe_allow_html=True,
-                )
-                if saved_file and arquivo is None:
-                    st.caption("PDF salvo")
 
         total += pontuacao
-        has_file = arquivo is not None or saved_file
         if pontuacao > 0:
             itens_pontuados.append(item["criterio"])
-            if has_file:
-                itens_com_pdf.append(item["criterio"])
-            else:
-                itens_sem_pdf.append(item["criterio"])
-        elif has_file:
-            itens_com_pdf.append(item["criterio"])
 
         items_payload.append(
             {
@@ -1908,15 +1930,13 @@ def page_minha_pontuacao(user: dict[str, str]) -> None:
                 "regra": item["regra"],
                 "maximo": item["maximo"],
                 "pontuacao": pontuacao,
-                "arquivo": arquivo,
             }
         )
 
     pontos_suficientes = total >= 10
     itens_suficientes = len(itens_pontuados) >= 2
-    comprovantes_ok = not itens_sem_pdf
-    declaracao_ok = declaracao is not None or declaracao_salva
-    completo = pontos_suficientes and itens_suficientes and comprovantes_ok and declaracao_ok
+    comprovantes_ok = comprovantes_pdf is not None or comprovantes_pdf_salvo
+    completo = pontos_suficientes and itens_suficientes and comprovantes_ok
     status_inscricao = "completo" if completo else "pendente"
 
     st.markdown('<div class="score-summary">', unsafe_allow_html=True)
@@ -1931,19 +1951,11 @@ def page_minha_pontuacao(user: dict[str, str]) -> None:
         else:
             st.warning("Status: pendente")
 
-    st.write("Itens com pontuação sem PDF:")
-    if itens_sem_pdf:
-        for criterio in itens_sem_pdf:
-            st.write(f"- {criterio}")
+    st.write("PDF único dos comprovantes:")
+    if comprovantes_ok:
+        st.write("- Anexado")
     else:
-        st.write("- Nenhum")
-
-    st.write("Itens com PDF anexado:")
-    if itens_com_pdf:
-        for criterio in itens_com_pdf:
-            st.write(f"- {criterio}")
-    else:
-        st.write("- Nenhum")
+        st.write("- Pendente")
 
     pendencias = []
     if not pontos_suficientes:
@@ -1951,9 +1963,7 @@ def page_minha_pontuacao(user: dict[str, str]) -> None:
     if not itens_suficientes:
         pendencias.append("pelo menos 2 itens pontuados")
     if not comprovantes_ok:
-        pendencias.append("todo item pontuado precisa ter PDF")
-    if not declaracao_ok:
-        pendencias.append("upload obrigatório da Declaração de Disponibilidade")
+        pendencias.append("upload obrigatório do PDF único dos comprovantes em ordem do Quadro 1")
 
     if pendencias:
         st.write("Pendências:")
@@ -1964,15 +1974,16 @@ def page_minha_pontuacao(user: dict[str, str]) -> None:
         save_inscricao(
             cpf=cpf,
             modalidade=modalidade,
+            tipo_servidor=tipo_servidor,
+            comprovantes_item_id=f"comprovantes_{quadro_label.lower().replace(' ', '_')}",
             total=total,
             status=status_inscricao,
-            declaracao=declaracao,
+            comprovantes_pdf=comprovantes_pdf,
             items_payload=items_payload,
         )
-        st.success("Inscrição salva com sucesso.")
+        st.session_state.inscricao_salva_feedback = True
         st.rerun()
 
-    st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -2008,11 +2019,11 @@ def page_administracao(user: dict[str, str]) -> None:
                 "nome": item.get("nome", ""),
                 "email": item.get("email", ""),
                 "modalidade": item.get("modalidade", ""),
+                "tipo_servidor": item.get("tipo_servidor", ""),
                 "pontuação_total": float(item.get("total") or 0),
                 "status": item.get("status", ""),
                 "itens_pontuados": item.get("itens_pontuados", 0),
-                "pdfs_anexados": item.get("pdfs_anexados", 0),
-                "declaração": "sim" if item.get("declaracao_path") else "não",
+                "pdf_unico": "sim" if item.get("comprovantes_pdf_path") else "não",
                 "atualizado_em": item.get("atualizado_em", ""),
             }
             for item in inscricoes
@@ -2025,17 +2036,19 @@ def page_administracao(user: dict[str, str]) -> None:
             total_inscricao = float(inscricao.get("total") or 0)
             with st.expander(f"{nome} · {cpf} · {total_inscricao:.1f} pts · {inscricao.get('status', 'pendente')}"):
                 st.write(f"Modalidade: {inscricao.get('modalidade', '')}")
+                if inscricao.get("tipo_servidor"):
+                    st.write(f"Categoria do servidor: {inscricao.get('tipo_servidor', '')}")
                 st.write(f"Atualizado em: {inscricao.get('atualizado_em', '')}")
 
-                declaracao_path_value = str(inscricao.get("declaracao_path") or "")
-                declaracao_path = Path(declaracao_path_value)
-                if declaracao_path_value and declaracao_path.exists():
+                comprovantes_path_value = str(inscricao.get("comprovantes_pdf_path") or "")
+                comprovantes_path = Path(comprovantes_path_value)
+                if comprovantes_path_value and comprovantes_path.exists():
                     st.download_button(
-                        "Baixar Declaração de Disponibilidade",
-                        declaracao_path.read_bytes(),
-                        declaracao_path.name,
+                        "Baixar PDF único dos comprovantes",
+                        comprovantes_path.read_bytes(),
+                        comprovantes_path.name,
                         "application/pdf",
-                        key=f"download_declaracao_{cpf}",
+                        key=f"download_comprovantes_{cpf}",
                         use_container_width=True,
                     )
 
@@ -2044,25 +2057,12 @@ def page_administracao(user: dict[str, str]) -> None:
                         "critério": item.get("criterio", ""),
                         "pontuação": float(item.get("pontuacao") or 0),
                         "máximo": float(item.get("maximo") or 0),
-                        "pdf": "sim" if item.get("arquivo_path") else "não",
                     }
                     for item in inscricao.get("itens", [])
-                    if float(item.get("pontuacao") or 0) > 0 or item.get("arquivo_path")
+                    if float(item.get("pontuacao") or 0) > 0
                 ]
                 st.dataframe(detalhe_itens, use_container_width=True, hide_index=True)
 
-                for item in inscricao.get("itens", []):
-                    arquivo_path_value = str(item.get("arquivo_path") or "")
-                    arquivo_path = Path(arquivo_path_value)
-                    if arquivo_path_value and arquivo_path.exists():
-                        st.download_button(
-                            f"Baixar PDF - {item.get('criterio', '')}",
-                            arquivo_path.read_bytes(),
-                            arquivo_path.name,
-                            "application/pdf",
-                            key=f"download_{cpf}_{item.get('item_id', '')}",
-                            use_container_width=True,
-                        )
     else:
         st.info("Nenhuma inscrição salva até o momento.")
 
