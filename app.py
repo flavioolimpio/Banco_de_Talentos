@@ -165,8 +165,112 @@ QUADROS_INSCRICAO = {
             "maximo": 9.0,
         },
     ],
-    "Estudante": [],
-    "Colaborador Externo": [],
+    "Estudante": [
+        {
+            "id": "cre",
+            "criterio": "CRE (Coeficiente de Rendimento Escolar)",
+            "regra": "De 60 a 100.",
+            "maximo": 100.0,
+        },
+        {
+            "id": "projetos_pdi_et_polo",
+            "criterio": "Experiência em desenvolvimento e execução de projetos de PD&I e/ou ET com empresas privadas/públicas no âmbito do Polo de Inovação do IFG",
+            "regra": "6 pontos por projeto, por semestre.",
+            "maximo": 60.0,
+        },
+        {
+            "id": "projetos_pdi_et_fora_polo",
+            "criterio": "Experiência em desenvolvimento e execução de projetos de PD&I e/ou ET com empresas privadas/públicas fora do âmbito do Polo de Inovação",
+            "regra": "4 pontos por projeto, por semestre.",
+            "maximo": 40.0,
+        },
+        {
+            "id": "projetos_pesquisa_inovacao_extensao",
+            "criterio": "Experiência na participação ou execução de projetos de pesquisa, inovação e/ou extensão fomentados por agências públicas ou por meio de editais internos de uma ICT",
+            "regra": "2 pontos por projeto, por semestre.",
+            "maximo": 20.0,
+        },
+        {
+            "id": "patente_depositada",
+            "criterio": "Patente depositada",
+            "regra": "2 pontos por objeto.",
+            "maximo": 20.0,
+        },
+        {
+            "id": "registro_software",
+            "criterio": "Registro de Software",
+            "regra": "1 ponto por objeto.",
+            "maximo": 10.0,
+        },
+        {
+            "id": "artigos_qualis",
+            "criterio": "Artigos científicos com Qualis em sua área de avaliação",
+            "regra": "1 ponto por artigo.",
+            "maximo": 10.0,
+        },
+        {
+            "id": "capacitacoes_polo",
+            "criterio": "Participação concluída em capacitações promovidas pelo Polo de Inovação do IFG",
+            "regra": "0,3 ponto por participação.",
+            "maximo": 9.0,
+        },
+    ],
+    "Colaborador Externo": [
+        {
+            "id": "titulacao",
+            "criterio": "Titulação",
+            "regra": "Técnico de Nível Médio/Graduando: 10 pts | Graduado: 20 pts | Especialista (Lato Sensu): 30 pts | Mestre: 40 pts | Doutor: 70 pts.",
+            "maximo": 70.0,
+        },
+        {
+            "id": "experiencia_profissional_area",
+            "criterio": "Experiência profissional comprovada em sua área de formação/atuação",
+            "regra": "2 pontos por mês.",
+            "maximo": 720.0,
+        },
+        {
+            "id": "projetos_pdi_et_polo",
+            "criterio": "Experiência em desenvolvimento e execução de projetos de PD&I e/ou ET com empresa privada/pública no âmbito do Polo de Inovação do IFG",
+            "regra": "2 pontos por mês.",
+            "maximo": 360.0,
+        },
+        {
+            "id": "projetos_pdi_et_fora_polo",
+            "criterio": "Experiência em desenvolvimento e execução de projetos de PD&I e/ou ET com empresa privada/pública fora do âmbito do Polo de Inovação",
+            "regra": "1,5 ponto por mês.",
+            "maximo": 180.0,
+        },
+        {
+            "id": "projetos_pesquisa_inovacao_extensao_formacao",
+            "criterio": "Experiência na participação em projetos de pesquisa, inovação e/ou extensão durante seu curso de formação",
+            "regra": "0,5 ponto por projeto, por mês.",
+            "maximo": 120.0,
+        },
+        {
+            "id": "patente_depositada",
+            "criterio": "Patente depositada",
+            "regra": "2 pontos por objeto.",
+            "maximo": 20.0,
+        },
+        {
+            "id": "registro_software",
+            "criterio": "Registro de software",
+            "regra": "1 ponto por objeto.",
+            "maximo": 10.0,
+        },
+        {
+            "id": "artigos_qualis",
+            "criterio": "Artigos científicos com Qualis em sua área de avaliação",
+            "regra": "1 ponto por artigo.",
+            "maximo": 10.0,
+        },
+        {
+            "id": "capacitacoes_polo",
+            "criterio": "Participação concluída em capacitações promovidas pelo Polo de Inovação do IFG",
+            "regra": "0,3 ponto por participação.",
+            "maximo": 9.0,
+        },
+    ],
 }
 
 
@@ -1090,8 +1194,9 @@ def safe_file_stem(value: str) -> str:
     return cleaned or "sem_identificacao"
 
 
-def save_pdf_upload(cpf: str, item_id: str, uploaded_file) -> tuple[str, str]:
-    cpf_dir = COMPROVANTES_DIR / safe_file_stem(cpf)
+def save_pdf_upload(cpf: str, item_id: str, uploaded_file, modalidade: str = "") -> tuple[str, str]:
+    base_dir = COMPROVANTES_DIR / safe_file_stem(modalidade) if modalidade else COMPROVANTES_DIR
+    cpf_dir = base_dir / safe_file_stem(cpf)
     cpf_dir.mkdir(parents=True, exist_ok=True)
     file_path = cpf_dir / f"{safe_file_stem(item_id)}.pdf"
     file_path.write_bytes(uploaded_file.getbuffer())
@@ -1142,7 +1247,7 @@ def save_inscricao(
     comprovantes_pdf_path = str(saved_inscricao.get("comprovantes_pdf_path", "") or "")
     comprovantes_pdf_nome = str(saved_inscricao.get("comprovantes_pdf_nome", "") or "")
     if comprovantes_pdf is not None:
-        comprovantes_pdf_path, comprovantes_pdf_nome = save_pdf_upload(cpf, comprovantes_item_id, comprovantes_pdf)
+        comprovantes_pdf_path, comprovantes_pdf_nome = save_pdf_upload(cpf, comprovantes_item_id, comprovantes_pdf, modalidade)
 
     with db_connection() as conn:
         conn.execute(
