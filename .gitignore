@@ -1,0 +1,32 @@
+# Local application data
+data/
+*.db
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+django_app/.venv/
+
+# Environment variables and local secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+streamlit.err.log
+streamlit.out.log
+
+# Django local/runtime files
+django_app/media/
+django_app/staticfiles/
+
+# OS/editor
+.DS_Store
+Thumbs.db
