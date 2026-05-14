@@ -10,7 +10,7 @@ env = environ.Env(
     SECRET_KEY=(str, "django-insecure-dev-only-change-me"),
     ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1"]),
     CSRF_TRUSTED_ORIGINS=(list, []),
-    DATABASE_URL=(str, f"sqlite:///{BASE_DIR / 'local.sqlite3'}"),
+    DATABASE_URL=(str, f"sqlite:///{BASE_DIR / 'dev.sqlite3'}"),
 )
 
 if env.bool("DJANGO_READ_DOT_ENV_FILE", default=True):
@@ -78,6 +78,8 @@ AUTHENTICATION_BACKENDS = [
     "axes.backends.AxesStandaloneBackend",
     "django.contrib.auth.backends.ModelBackend",
 ]
+
+AUTH_USER_MODEL = "usuarios.Usuario"
 
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
