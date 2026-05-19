@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Minha Inscrição - Banco de Talentos IFG{% endblock %}
+
+{% block content %}
+<section class="dashboard-shell">
+    <nav class="topbar">
+        <strong>Banco de Talentos · Polo IFG</strong>
+        <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="secondary-button">Sair</button>
+        </form>
+    </nav>
+
+    <div style="max-width:720px;margin:24px auto;padding:0 16px">
+        <a href="{% url 'home' %}" class="back-link">← voltar</a>
+        <h2 style="margin:12px 0 4px;color:#202124">
+            Inscrição — {{ request.user.get_vinculo_display }}
+        </h2>
+
+        {% if not criterios_com_score %}
+            <div style="background:#f8f9fa;border-radius:8px;padding:20px;text-align:center;color:#666;margin-top:16px">
+                Quadro em preparação. Os critérios desta modalidade serão disponibilizados em breve.
+            </div>
+        {% else %}
+
+        <div style="background:#fff8d6;border-left:4px solid #d6f000;padding:10px 14px;font-size:13px;color:#555;margin:12px 0;border-radius:0 6px 6px 0">
+            <strong>Atenção:</strong> Lattes <strong>não</strong> é aceito como comprovante.
+            Anexe um único PDF com todos os documentos na ordem do quadro.
+        </div>
+
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+
+            {% if is_servidor %}
+            <div style="margin-bottom:16px">
+                <label for="{{ form.tipo_servidor.id_for_label }}" style="font-weight:600;display:block;margin-bottom:4px">
+                    {{ form.tipo_servidor.label }}
+                </label>
+                {{ form.tipo_servidor }}
+                {{ form.tipo_servidor.errors }}
+            </div>
+            {% endif %}
+
+            <div style="margin-bottom:20px">
+                <label style="font-weight:600;display:block;margin-bottom:4px">
+                    {{ form.comprovantes_pdf.label }}
+                </label>
+                {% if inscricao and inscricao.comprovantes_pdf %}
+                    <p style="font-size:13px;color:#555;margin:0 0 6px">
+                        PDF atual: <strong>{{ inscricao.comprovantes_pdf_nome_original }}</strong>
+                        (envie um novo para substituir)
+                    </p>
+                {% endif %}
+                {{ form.comprovantes_pdf }}
+                {{ form.comprovantes_pdf.errors }}
+                <small style="color:#777">{{ form.comprovantes_pdf.help_text }}</small>
+            </div>
+
+            <h3 style="margin:0 0 12px;font-size:16px;color:#202124">Critérios de pontuação</h3>
+
+            {% for criterio, score in criterios_com_score %}
+            <div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start">
+                <div style="flex:1">
+                    <div style="font-weight:600;font-size:14px;color:#202124">
+                        {{ forloop.counter }}. {{ criterio.criterio }}
+                    </div>
+                    <div style="font-size:12px;color:#777;margin-top:4px">
+                        <strong>Regra:</strong> {{ criterio.regra }}
+                    </div>
+                    <div style="font-size:12px;color:#777">
+                        <strong>Máximo:</strong> {{ criterio.maximo|floatformat:"-2" }} pts
+                    </div>
+                </div>
+                <div style="text-align:center;flex-shrink:0">
+                    <div style="font-size:11px;color:#888;margin-bottom:4px">Pontuação</div>
+                    <input
+                        type="number"
+                        name="score_{{ criterio.pk }}"
+                        data-score
+                        data-max="{{ criterio.maximo }}"
+                        min="0"
+                        max="{{ criterio.maximo }}"
+                        step="0.1"
+                        value="{{ score|floatformat:1 }}"
+                        style="width:76px;padding:6px;border:1px solid #ccc;border-radius:6px;text-align:center;font-size:16px;font-weight:600"
+                    >
+                </div>
+            </div>
+            {% endfor %}
+
+            <div style="background:#f8f8f8;border-radius:8px;padding:16px;margin-top:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+                <div>
+                    <div style="font-size:13px;color:#555">Pontuação total</div>
+                    <div style="font-size:28px;font-weight:700;color:#202124">
+                        <span id="total-display">0,0</span>
+                        <span style="font-size:14px;font-weight:400">pts</span>
+                    </div>
+                </div>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                    <button type="submit" name="action" value="rascunho" class="secondary-button">
+                        Salvar rascunho
+                    </button>
+                    <div>
+                        <label style="display:flex;align-items:flex-start;gap:6px;font-size:13px;color:#555;margin-bottom:6px;max-width:240px">
+                            {{ form.aceite_envio }}
+                            <span>{{ form.aceite_envio.label }}</span>
+                        </label>
+                        {{ form.aceite_envio.errors }}
+                        <button type="submit" name="action" value="enviar" class="primary-button">
+                            Enviar inscrição ✓
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <p style="font-size:12px;color:#c00;margin:6px 0 0">
+                ⚠ Após enviar, a inscrição fica bloqueada para edição.
+            </p>
+        </form>
+
+        {% endif %}
+    </div>
+</section>
+
+<script>
+(function () {
+    function updateTotal() {
+        var inputs = document.querySelectorAll('[data-score]');
+        var total = 0;
+        inputs.forEach(function (el) {
+            var val = parseFloat(el.value) || 0;
+            var max = parseFloat(el.dataset.max) || 0;
+            total += Math.min(Math.max(val, 0), max);
+        });
+        var display = document.getElementById('total-display');
+        if (display) {
+            display.textContent = total.toFixed(1).replace('.', ',');
+        }
+    }
+    document.querySelectorAll('[data-score]').forEach(function (el) {
+        el.addEventListener('input', updateTotal);
+    });
+    updateTotal();
+}());
+</script>
+{% endblock %}

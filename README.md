@@ -1,38 +1,90 @@
-# Banco de Talentos - Polo de Inovacao IFG
+# Banco de Talentos — Polo de Inovação IFG
 
-Aplicacao piloto em Streamlit para cadastro de estudantes, servidores e colaboradores externos do Polo de Inovacao do IFG.
+Sistema web para cadastro de candidatos e gestão de inscrições em
+editais do Polo de Inovação do Instituto Federal de Goiás.
 
-## Como rodar localmente
+**Responsável:** Prof. Flávio (RH do Polo EMBRAPII IFG)  
+**Contexto:** Etapa 0 do workflow EMBRAPII — banco de especialistas
+
+---
+
+## Versão atual
+
+| Versão | Tecnologia | Status |
+|--------|-----------|--------|
+| 1.0 (legado) | Streamlit (`app.py`) | Em uso |
+| 2.0 (nova) | Django (`django_app/`) | Em construção |
+
+Durante a migração, ambas coexistem na mesma pasta.
+O Streamlit original **não deve ser modificado** enquanto estiver em produção.
+
+---
+
+## Rodar localmente (Django)
 
 ```bash
-pip install -r requirements.txt
-streamlit run app.py
+# 1. Ativar ambiente
+source django_app/venv/bin/activate
+
+# 2. Rodar
+cd django_app
+python manage.py runserver
+
+# Acesse: http://localhost:8000
 ```
 
-## O que esta versao ja faz
+## Compartilhar com testadores (ngrok)
 
-- Tela publica de login e cadastro.
-- Cadastro por categoria: Estudante, Servidor e Colaborador Externo.
-- Aceite simples de uso de dados/LGPD no cadastro.
-- Login com senha armazenada em hash.
-- Area logada com Home, Meu Cadastro e Minha Pontuacao.
-- Persistencia dos dados pessoais, endereco e formacao.
-- Area administrativa para listar e baixar os cadastros em CSV.
-- Banco SQLite local em `data/banco_talentos.db`.
+```bash
+# Terminal 1 — Django rodando
+python manage.py runserver
 
-## Usuario de teste
-
-```text
-admim
-admim
+# Terminal 2 — túnel público temporário
+ngrok http 8000
+# Cole a URL gerada no grupo do time
 ```
 
-Esse usuario tem perfil de administrador para testar a tela **Administracao**.
+---
 
-## Publicacao piloto
+## Estrutura de arquivos
 
-Para um piloto com dados reais, publique em um ambiente com disco persistente, como VPS, Render com persistent disk, Railway/VM, ou outro host que mantenha o arquivo `data/banco_talentos.db`.
+```
+.
+├── app.py                    ← Streamlit original (NÃO MODIFICAR)
+├── data/                     ← Banco SQLite + PDFs (NÃO COMMITAR)
+├── imagens/                  ← Assets visuais IFG
+├── django_app/               ← Nova versão Django
+│   ├── apps/
+│   │   ├── usuarios/         ← Autenticação, cadastro, LGPD
+│   │   ├── inscricoes/       ← Inscrições e pontuação
+│   │   ├── auditoria/        ← Logs de auditoria
+│   │   └── core/             ← Home, utilitários
+│   ├── config/settings/      ← base.py, dev.py, prod.py
+│   ├── templates/            ← HTML
+│   └── static/               ← CSS + assets
+├── docs/
+│   └── guia-ti-ifg.md        ← Instruções para a TI do IFG
+├── CLAUDE.md                 ← Contexto para Claude Code
+├── AGENTS.md                 ← Regras para agentes de IA
+└── .claude/skills/           ← Skills do projeto
+    └── django-ifg/
+        ├── SKILL.md
+        └── references/
+```
 
-O Streamlit Community Cloud serve para demonstracao visual, mas nao e ideal para cadastro oficial porque o arquivo SQLite local pode nao ser persistente entre reinicios.
+---
 
-Antes de abrir para um grupo maior, recomenda-se trocar a senha administrativa, revisar o texto de consentimento/LGPD e definir rotina de backup do banco `data/banco_talentos.db`.
+## Documentação
+
+- `CLAUDE.md` — contexto completo para Claude Code (decisões técnicas, stack, regras)
+- `AGENTS.md` — regras de operação para qualquer agente de IA
+- `docs/guia-ti-ifg.md` — instruções de deploy e manutenção para a TI do IFG
+- `.claude/skills/django-ifg/` — skill de desenvolvimento Django para Claude Code
+
+---
+
+## Conformidade
+
+- **LGPD** (Lei 13.709/2018) — dados pessoais de candidatos
+- **EMBRAPII** — normas operacionais do polo
+- **IFG** — políticas institucionais de TI e segurança da informação

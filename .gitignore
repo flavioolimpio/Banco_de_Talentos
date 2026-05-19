@@ -1,0 +1,46 @@
+# ============================================================
+# BANCO DE TALENTOS IFG — .gitignore
+# ============================================================
+
+# Brainstorming visual companion (sessões locais)
+.superpowers/
+
+# ⚠️ DADOS PESSOAIS — NUNCA COMMITAR (LGPD)
+data/
+media/
+*.db
+*.sqlite3
+
+# Segredos
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Django
+staticfiles/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Testes
+.coverage
+htmlcov/
+.pytest_cache/

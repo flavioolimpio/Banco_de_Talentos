@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro - Banco de Talentos IFG{% endblock %}
+
+{% block content %}
+<section class="auth-panel wide">
+    <a class="back-link" href="{% url 'login' %}">← voltar</a>
+    <h1>Cadastro</h1>
+    <p>Preencha os dados iniciais para acessar a plataforma.</p>
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% for field in form %}
+            {% if field.name == "aceite_lgpd" %}
+                <label class="check-row">
+                    {{ field }}
+                    <span>{{ field.label }}</span>
+                </label>
+            {% else %}
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+            {% endif %}
+            {{ field.errors }}
+        {% endfor %}
+        <p class="muted">Versão do termo LGPD: {{ termo_versao }}</p>
+        <button type="submit" class="primary-button">Cadastrar</button>
+    </form>
+</section>
+{% endblock %}
