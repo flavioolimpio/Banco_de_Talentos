@@ -16,6 +16,7 @@ class Command(BaseCommand):
 
         for modalidade, itens in QUADROS_INSCRICAO.items():
             for ordem, item in enumerate(itens, start=1):
+                # tipo_servidor="" aplica a ambos os tipos de servidor (mesmo quadro no edital atual)
                 _, created = CriterioEdital.objects.update_or_create(
                     modalidade=modalidade,
                     tipo_servidor="",

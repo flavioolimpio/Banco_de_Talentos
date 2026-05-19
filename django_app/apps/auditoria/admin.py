@@ -1,3 +1,7 @@
+# apps/auditoria/admin.py
+# Banco de Talentos — Polo de Inovação IFG
+# Admin somente-leitura para logs de auditoria (LGPD: ninguém edita ou apaga logs).
+
 from django.contrib import admin
 
 from apps.auditoria.models import AuditLog

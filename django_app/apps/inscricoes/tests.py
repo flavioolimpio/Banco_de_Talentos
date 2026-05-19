@@ -141,3 +141,17 @@ class InscricaoAdminActionsTest(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+
+    def test_export_csv_registra_auditlog(self):
+        from apps.auditoria.models import AuditAction, AuditLog
+        self.client.force_login(self.admin_user)
+        self.client.post(
+            "/admin/inscricoes/inscricao/",
+            {
+                "action": "exportar_csv",
+                "_selected_action": [str(self.inscricao.pk)],
+            },
+        )
+        self.assertTrue(
+            AuditLog.objects.filter(acao=AuditAction.CSV_EXPORTADO).exists()
+        )

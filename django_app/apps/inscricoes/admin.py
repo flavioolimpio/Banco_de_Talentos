@@ -81,6 +81,14 @@ class InscricaoAdmin(admin.ModelAdmin):
 
     @admin.action(description="Exportar selecionadas como CSV")
     def exportar_csv(self, request, queryset):
+        from apps.auditoria.models import AuditAction, AuditLog
+        AuditLog.objects.create(
+            ator=request.user,
+            acao=AuditAction.CSV_EXPORTADO,
+            detalhes={"total": queryset.count()},
+            ip=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
         return _exportar_inscricoes_csv(queryset)
 
 
