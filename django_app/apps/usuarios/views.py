@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth import login, logout
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import PasswordResetConfirmView, PasswordResetDoneView, PasswordResetView
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
@@ -75,8 +76,15 @@ def cadastro_view(request):
     return render(request, "usuarios/cadastro.html", {"form": form, "termo_versao": LGPD_TERMO_VERSAO_ATUAL})
 
 
+@login_required
 def home_view(request):
-    return render(request, "usuarios/home.html")
+    from apps.inscricoes.models import Inscricao
+    inscricao = None
+    try:
+        inscricao = Inscricao.objects.get(usuario=request.user)
+    except Inscricao.DoesNotExist:
+        pass
+    return render(request, "usuarios/home.html", {"inscricao": inscricao})
 
 
 class RecuperacaoSenhaView(PasswordResetView):
