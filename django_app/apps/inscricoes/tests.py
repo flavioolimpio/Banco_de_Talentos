@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.management import call_command
 from django.test import RequestFactory, TestCase
+from django.utils import timezone
 
 from apps.inscricoes.admin import InscricaoAdmin
 from apps.inscricoes.models import CriterioEdital, Inscricao, StatusInscricao
@@ -270,3 +271,41 @@ class InscricaoFormTest(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn("comprovantes_pdf", form.errors)
+
+
+class InscricaoViewGetTest(TestCase):
+    def setUp(self):
+        call_command("popular_criterios", verbosity=0)
+        self.candidato = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="candidato@test.com",
+            nome_completo="Candidato Teste",
+            vinculo=Vinculo.ESTUDANTE,
+            password="senha123",
+        )
+        self.client.force_login(self.candidato)
+
+    def test_get_retorna_200(self):
+        response = self.client.get(reverse("inscricao"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_get_exibe_criterios_da_modalidade(self):
+        response = self.client.get(reverse("inscricao"))
+        criterios = CriterioEdital.objects.filter(modalidade="estudante")
+        for criterio in criterios:
+            self.assertContains(response, criterio.criterio)
+
+    def test_get_redireciona_se_inscricao_enviada(self):
+        Inscricao.objects.create(
+            usuario=self.candidato,
+            modalidade="estudante",
+            status=StatusInscricao.EM_ANALISE,
+            enviada_em=timezone.now(),
+        )
+        response = self.client.get(reverse("inscricao"))
+        self.assertRedirects(response, reverse("inscricao_confirmacao"))
+
+    def test_get_sem_criterios_exibe_aviso(self):
+        CriterioEdital.objects.filter(modalidade="estudante").update(ativo=False)
+        response = self.client.get(reverse("inscricao"))
+        self.assertContains(response, "preparação")

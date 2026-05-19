@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Inscrição Enviada - Banco de Talentos IFG{% endblock %}
+
+{% block content %}
+<section class="dashboard-shell">
+    <nav class="topbar">
+        <strong>Banco de Talentos · Polo IFG</strong>
+        <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="secondary-button">Sair</button>
+        </form>
+    </nav>
+
+    <div style="max-width:720px;margin:24px auto;padding:0 16px;text-align:center">
+        <h2 style="margin:32px 0 8px;color:#168241">Inscrição enviada com sucesso!</h2>
+        <p style="color:#555;font-size:15px;margin-bottom:24px">
+            Sua inscrição foi recebida e está aguardando análise pela equipe de RH do Polo de Inovação IFG.
+        </p>
+        <a href="{% url 'home' %}" class="primary-button" style="display:inline-block;text-decoration:none">
+            Voltar ao início
+        </a>
+    </div>
+</section>
+{% endblock %}
