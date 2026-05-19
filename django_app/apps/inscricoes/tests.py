@@ -155,3 +155,16 @@ class InscricaoAdminActionsTest(TestCase):
         self.assertTrue(
             AuditLog.objects.filter(acao=AuditAction.CSV_EXPORTADO).exists()
         )
+
+
+from django.urls import reverse
+
+
+class InscricaoUrlsTest(TestCase):
+    def test_url_inscricao_resolve(self):
+        url = reverse("inscricao")
+        self.assertEqual(url, "/inscricao/")
+
+    def test_url_confirmacao_resolve(self):
+        url = reverse("inscricao_confirmacao")
+        self.assertEqual(url, "/inscricao/confirmacao/")
