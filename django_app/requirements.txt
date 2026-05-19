@@ -8,3 +8,4 @@ whitenoise==6.11.0
 gunicorn==23.0.0
 pytest==8.4.2
 pytest-django==4.11.1
+django-csp==3.8

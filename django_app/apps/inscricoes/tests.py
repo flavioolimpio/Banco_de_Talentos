@@ -449,3 +449,73 @@ class ConfirmacaoViewTest(TestCase):
         )
         response = self.client.get(reverse("inscricao_confirmacao"))
         self.assertContains(response, "42,5")
+
+
+class InscricaoDownloadTest(TestCase):
+    def setUp(self):
+        self.staff_user = Usuario.objects.create_user(
+            cpf="52998224725",
+            email="rh@ifg.edu.br",
+            nome_completo="RH Staff",
+            password="senha123",
+            is_staff=True,
+        )
+        self.candidato = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="candidato@test.com",
+            nome_completo="Candidato Teste",
+            vinculo=Vinculo.ESTUDANTE,
+            password="senha123",
+        )
+        self.inscricao = Inscricao.objects.create(
+            usuario=self.candidato,
+            modalidade="estudante",
+            status=StatusInscricao.EM_ANALISE,
+            enviada_em=timezone.now(),
+        )
+
+    def _url(self):
+        return reverse("download_comprovante", args=[self.inscricao.pk])
+
+    def _add_pdf(self):
+        from django.core.files.base import ContentFile
+        self.inscricao.comprovantes_pdf.save(
+            "comp.pdf", ContentFile(b"%PDF-1.4 ok"), save=False
+        )
+        self.inscricao.comprovantes_pdf_nome_original = "comp.pdf"
+        self.inscricao.save()
+
+    def test_sem_login_redireciona(self):
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response["Location"])
+
+    def test_nao_staff_retorna_403(self):
+        self.client.force_login(self.candidato)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 403)
+
+    def test_sem_pdf_retorna_404(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 404)
+
+    def test_com_pdf_retorna_200_e_content_disposition(self):
+        self._add_pdf()
+        self.client.force_login(self.staff_user)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("comp.pdf", response.get("Content-Disposition", ""))
+
+    def test_com_pdf_registra_auditlog(self):
+        from apps.auditoria.models import AuditAction, AuditLog
+        self._add_pdf()
+        self.client.force_login(self.staff_user)
+        self.client.get(self._url())
+        self.assertTrue(
+            AuditLog.objects.filter(acao=AuditAction.COMPROVANTE_DOWNLOAD).exists()
+        )
+
+    def test_media_direta_retorna_404(self):
+        response = self.client.get("/media/comprovantes/estudante/11144477735/comp.pdf")
+        self.assertEqual(response.status_code, 404)

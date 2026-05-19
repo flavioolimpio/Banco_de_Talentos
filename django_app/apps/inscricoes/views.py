@@ -6,8 +6,10 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.shortcuts import redirect, render
+from django.http import FileResponse, Http404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -145,3 +147,28 @@ def confirmacao_view(request):
     except Inscricao.DoesNotExist:
         return redirect("inscricao")
     return render(request, "inscricoes/confirmacao.html", {"inscricao": inscricao})
+
+
+@login_required
+def download_comprovante(request, pk):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    inscricao = get_object_or_404(Inscricao, pk=pk)
+    if not inscricao.comprovantes_pdf:
+        raise Http404("Esta inscrição não possui comprovante em PDF.")
+    file_handle = inscricao.comprovantes_pdf.open("rb")
+    AuditLog.objects.create(
+        ator=request.user,
+        acao=AuditAction.COMPROVANTE_DOWNLOAD,
+        ip=_get_client_ip(request),
+        user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        detalhes={
+            "inscricao_id": pk,
+            "arquivo": inscricao.comprovantes_pdf_nome_original,
+        },
+    )
+    return FileResponse(
+        file_handle,
+        as_attachment=True,
+        filename=inscricao.comprovantes_pdf_nome_original or "comprovantes.pdf",
+    )

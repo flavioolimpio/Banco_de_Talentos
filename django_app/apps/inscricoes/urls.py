@@ -9,4 +9,5 @@ from apps.inscricoes import views
 urlpatterns = [
     path("inscricao/", views.inscricao_view, name="inscricao"),
     path("inscricao/confirmacao/", views.confirmacao_view, name="inscricao_confirmacao"),
+    path("inscricoes/<int:pk>/comprovante/", views.download_comprovante, name="download_comprovante"),
 ]
