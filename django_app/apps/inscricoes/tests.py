@@ -168,3 +168,77 @@ class InscricaoUrlsTest(TestCase):
     def test_url_confirmacao_resolve(self):
         url = reverse("inscricao_confirmacao")
         self.assertEqual(url, "/inscricao/confirmacao/")
+
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+from apps.inscricoes.forms import InscricaoForm
+from apps.usuarios.models import Usuario, Vinculo
+
+
+class InscricaoFormTest(TestCase):
+    def _usuario(self, vinculo=Vinculo.ESTUDANTE):
+        return Usuario(vinculo=vinculo)
+
+    def _pdf(self, content=b"%PDF-1.4 ok", name="test.pdf", size=None):
+        if size:
+            content = b"%PDF-" + b"x" * (size - 5)
+        return SimpleUploadedFile(name, content, content_type="application/pdf")
+
+    def test_pdf_com_bytes_invalidos_e_rejeitado(self):
+        pdf = SimpleUploadedFile("test.pdf", b"not a pdf", content_type="application/pdf")
+        form = InscricaoForm(
+            {"tipo_servidor": "", "aceite_envio": False},
+            files={"comprovantes_pdf": pdf},
+            usuario=self._usuario(),
+            acao="rascunho",
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("comprovantes_pdf", form.errors)
+
+    def test_pdf_maior_que_10mb_e_rejeitado(self):
+        pdf = self._pdf(size=10 * 1024 * 1024 + 1)
+        form = InscricaoForm(
+            {"tipo_servidor": "", "aceite_envio": False},
+            files={"comprovantes_pdf": pdf},
+            usuario=self._usuario(),
+            acao="rascunho",
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("comprovantes_pdf", form.errors)
+
+    def test_pdf_valido_passa(self):
+        pdf = self._pdf()
+        form = InscricaoForm(
+            {"tipo_servidor": "", "aceite_envio": False},
+            files={"comprovantes_pdf": pdf},
+            usuario=self._usuario(),
+            acao="rascunho",
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_sem_pdf_e_valido_para_rascunho(self):
+        form = InscricaoForm(
+            {"tipo_servidor": "", "aceite_envio": False},
+            usuario=self._usuario(),
+            acao="rascunho",
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_tipo_servidor_obrigatorio_para_servidor(self):
+        form = InscricaoForm(
+            {"tipo_servidor": "", "aceite_envio": False},
+            usuario=self._usuario(Vinculo.SERVIDOR),
+            acao="rascunho",
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("tipo_servidor", form.errors)
+
+    def test_aceite_envio_obrigatorio_para_enviar(self):
+        form = InscricaoForm(
+            {"tipo_servidor": "", "aceite_envio": False},
+            usuario=self._usuario(),
+            acao="enviar",
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("aceite_envio", form.errors)
