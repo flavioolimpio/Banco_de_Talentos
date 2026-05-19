@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Banco de Talentos IFG{% endblock %}
+
+{% block content %}
+<section class="dashboard-shell">
+    <nav class="topbar">
+        <strong>Olá! Boas vindas à plataforma do Banco de Talentos</strong>
+        <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="secondary-button">Sair</button>
+        </form>
+    </nav>
+    <div class="placeholder-card">
+        <h1>Área do candidato</h1>
+        <p>Login e cadastro já estão funcionando. As próximas telas trarão Meu Cadastro, Inscrição e Pontuação.</p>
+    </div>
+</section>
+{% endblock %}

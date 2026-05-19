@@ -76,7 +76,7 @@ DATABASES = {"default": env.db("DATABASE_URL")}
 
 AUTHENTICATION_BACKENDS = [
     "axes.backends.AxesStandaloneBackend",
-    "django.contrib.auth.backends.ModelBackend",
+    "apps.usuarios.backends.CpfEmailBackend",
 ]
 
 AUTH_USER_MODEL = "usuarios.Usuario"
