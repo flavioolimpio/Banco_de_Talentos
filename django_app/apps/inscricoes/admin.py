@@ -6,7 +6,9 @@ import csv
 
 from django.contrib import admin, messages
 from django.http import HttpResponse
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html
 
 from apps.inscricoes.models import CriterioEdital, Inscricao, InscricaoItem, StatusInscricao
 
@@ -60,9 +62,16 @@ class InscricaoAdmin(admin.ModelAdmin):
     list_display = ("usuario", "modalidade", "tipo_servidor", "total", "status", "atualizado_em")
     list_filter = ("modalidade", "tipo_servidor", "status")
     search_fields = ("usuario__cpf", "usuario__nome_completo", "usuario__email")
-    readonly_fields = ("criado_em", "atualizado_em", "enviada_em")
+    readonly_fields = ("criado_em", "atualizado_em", "enviada_em", "pdf_download_link")
     inlines = [InscricaoItemInline]
     actions = ["aprovar_selecionadas", "reprovar_selecionadas", "marcar_em_analise", "exportar_csv"]
+
+    def pdf_download_link(self, obj):
+        if not obj.comprovantes_pdf:
+            return "—"
+        url = reverse("download_comprovante", args=[obj.pk])
+        return format_html('<a href="{}" target="_blank">Baixar PDF</a>', url)
+    pdf_download_link.short_description = "Comprovantes"
 
     @admin.action(description="Aprovar inscrições selecionadas")
     def aprovar_selecionadas(self, request, queryset):
