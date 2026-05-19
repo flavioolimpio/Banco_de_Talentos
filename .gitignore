@@ -1,32 +1,46 @@
-# Local application data
+# ============================================================
+# BANCO DE TALENTOS IFG — .gitignore
+# ============================================================
+
+# Brainstorming visual companion (sessões locais)
+.superpowers/
+
+# ⚠️ DADOS PESSOAIS — NUNCA COMMITAR (LGPD)
 data/
+media/
 *.db
 *.sqlite3
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Virtual environments
-.venv/
-venv/
-django_app/.venv/
-
-# Environment variables and local secrets
+# Segredos
 .env
 .env.*
 !.env.example
 
-# Logs
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Django
+staticfiles/
 *.log
-streamlit.err.log
-streamlit.out.log
 
-# Django local/runtime files
-django_app/media/
-django_app/staticfiles/
-
-# OS/editor
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
-Thumbs.db
+
+# Testes
+.coverage
+htmlcov/
+.pytest_cache/
