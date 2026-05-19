@@ -290,10 +290,11 @@ class InscricaoViewGetTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_get_exibe_criterios_da_modalidade(self):
+        from django.utils.html import escape
         response = self.client.get(reverse("inscricao"))
         criterios = CriterioEdital.objects.filter(modalidade="estudante")
         for criterio in criterios:
-            self.assertContains(response, criterio.criterio)
+            self.assertContains(response, escape(criterio.criterio))
 
     def test_get_redireciona_se_inscricao_enviada(self):
         Inscricao.objects.create(
@@ -309,3 +310,142 @@ class InscricaoViewGetTest(TestCase):
         CriterioEdital.objects.filter(modalidade="estudante").update(ativo=False)
         response = self.client.get(reverse("inscricao"))
         self.assertContains(response, "preparação")
+
+
+class InscricaoViewPostTest(TestCase):
+    def setUp(self):
+        call_command("popular_criterios", verbosity=0)
+        self.candidato = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="candidato@test.com",
+            nome_completo="Candidato Teste",
+            vinculo=Vinculo.ESTUDANTE,
+            password="senha123",
+        )
+        self.client.force_login(self.candidato)
+        self.criterios = list(CriterioEdital.objects.filter(modalidade="estudante", ativo=True))
+
+    def _scores(self, valor="0"):
+        return {f"score_{c.pk}": valor for c in self.criterios}
+
+    def test_rascunho_cria_inscricao(self):
+        data = {"action": "rascunho", **self._scores("5")}
+        self.client.post(reverse("inscricao"), data)
+        self.assertTrue(Inscricao.objects.filter(usuario=self.candidato).exists())
+
+    def test_rascunho_salva_itens(self):
+        data = {"action": "rascunho", **self._scores("5")}
+        self.client.post(reverse("inscricao"), data)
+        inscricao = Inscricao.objects.get(usuario=self.candidato)
+        self.assertEqual(inscricao.itens.count(), len(self.criterios))
+
+    def test_rascunho_redireciona_para_formulario(self):
+        data = {"action": "rascunho", **self._scores("0")}
+        response = self.client.post(reverse("inscricao"), data)
+        self.assertRedirects(response, reverse("inscricao"))
+
+    def test_rascunho_idempotente_nao_duplica_itens(self):
+        data = {"action": "rascunho", **self._scores("3")}
+        self.client.post(reverse("inscricao"), data)
+        self.client.post(reverse("inscricao"), data)
+        inscricao = Inscricao.objects.get(usuario=self.candidato)
+        self.assertEqual(inscricao.itens.count(), len(self.criterios))
+
+    def test_rascunho_registra_auditlog(self):
+        from apps.auditoria.models import AuditAction, AuditLog
+        data = {"action": "rascunho", **self._scores("0")}
+        self.client.post(reverse("inscricao"), data)
+        self.assertTrue(AuditLog.objects.filter(acao=AuditAction.INSCRICAO_SALVA).exists())
+
+    def test_enviar_define_enviada_em(self):
+        data = {"action": "enviar", "aceite_envio": True, **self._scores("0")}
+        self.client.post(reverse("inscricao"), data)
+        inscricao = Inscricao.objects.get(usuario=self.candidato)
+        self.assertIsNotNone(inscricao.enviada_em)
+
+    def test_enviar_status_em_analise(self):
+        data = {"action": "enviar", "aceite_envio": True, **self._scores("0")}
+        self.client.post(reverse("inscricao"), data)
+        inscricao = Inscricao.objects.get(usuario=self.candidato)
+        self.assertEqual(inscricao.status, StatusInscricao.EM_ANALISE)
+
+    def test_enviar_redireciona_para_confirmacao(self):
+        data = {"action": "enviar", "aceite_envio": True, **self._scores("0")}
+        response = self.client.post(reverse("inscricao"), data)
+        self.assertRedirects(response, reverse("inscricao_confirmacao"))
+
+    def test_enviar_sem_aceite_retorna_form_com_erro(self):
+        data = {"action": "enviar", "aceite_envio": False, **self._scores("0")}
+        response = self.client.post(reverse("inscricao"), data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "verdadeiros")
+
+    def test_pontuacao_maxima_respeitada(self):
+        criterio = self.criterios[0]
+        data = {"action": "rascunho", **self._scores("0")}
+        data[f"score_{criterio.pk}"] = str(float(criterio.maximo) + 999)
+        self.client.post(reverse("inscricao"), data)
+        inscricao = Inscricao.objects.get(usuario=self.candidato)
+        item = inscricao.itens.get(criterio=criterio)
+        self.assertLessEqual(item.pontuacao, criterio.maximo)
+
+    def test_pdf_upload_salvo(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        pdf = SimpleUploadedFile("comp.pdf", b"%PDF-1.4 ok", content_type="application/pdf")
+        data = {"action": "rascunho", **self._scores("0")}
+        self.client.post(reverse("inscricao"), data, files={"comprovantes_pdf": pdf})
+        # POST via client.post passa files no segundo dict
+        data2 = {"action": "rascunho", **self._scores("0")}
+        self.client.post(reverse("inscricao"), {**data2, "comprovantes_pdf": pdf})
+        inscricao = Inscricao.objects.get(usuario=self.candidato)
+        self.assertTrue(bool(inscricao.comprovantes_pdf))
+
+
+class ConfirmacaoViewTest(TestCase):
+    def setUp(self):
+        call_command("popular_criterios", verbosity=0)
+        self.candidato = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="candidato@test.com",
+            nome_completo="Candidato Teste",
+            vinculo=Vinculo.ESTUDANTE,
+            password="senha123",
+        )
+        self.client.force_login(self.candidato)
+
+    def test_sem_inscricao_redireciona(self):
+        response = self.client.get(reverse("inscricao_confirmacao"))
+        self.assertRedirects(response, reverse("inscricao"))
+
+    def test_com_inscricao_retorna_200(self):
+        Inscricao.objects.create(
+            usuario=self.candidato,
+            modalidade="estudante",
+            status=StatusInscricao.EM_ANALISE,
+            enviada_em=timezone.now(),
+            total=Decimal("20.00"),
+        )
+        response = self.client.get(reverse("inscricao_confirmacao"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_exibe_nome_candidato(self):
+        Inscricao.objects.create(
+            usuario=self.candidato,
+            modalidade="estudante",
+            status=StatusInscricao.EM_ANALISE,
+            enviada_em=timezone.now(),
+            total=Decimal("20.00"),
+        )
+        response = self.client.get(reverse("inscricao_confirmacao"))
+        self.assertContains(response, "Candidato Teste")
+
+    def test_exibe_total(self):
+        Inscricao.objects.create(
+            usuario=self.candidato,
+            modalidade="estudante",
+            status=StatusInscricao.EM_ANALISE,
+            enviada_em=timezone.now(),
+            total=Decimal("42.50"),
+        )
+        response = self.client.get(reverse("inscricao_confirmacao"))
+        self.assertContains(response, "42,5")

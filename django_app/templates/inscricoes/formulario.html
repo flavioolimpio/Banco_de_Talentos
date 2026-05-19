@@ -64,10 +64,10 @@
             <div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start">
                 <div style="flex:1">
                     <div style="font-weight:600;font-size:14px;color:#202124">
-                        {{ forloop.counter }}. {{ criterio.criterio|safe }}
+                        {{ forloop.counter }}. {{ criterio.criterio }}
                     </div>
                     <div style="font-size:12px;color:#777;margin-top:4px">
-                        <strong>Regra:</strong> {{ criterio.regra|safe }}
+                        <strong>Regra:</strong> {{ criterio.regra }}
                     </div>
                     <div style="font-size:12px;color:#777">
                         <strong>Máximo:</strong> {{ criterio.maximo|floatformat:"-2" }} pts

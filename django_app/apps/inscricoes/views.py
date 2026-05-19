@@ -17,6 +17,13 @@ from apps.inscricoes.models import CriterioEdital, Inscricao, InscricaoItem, Sta
 from apps.usuarios.models import Vinculo
 
 
+def _get_client_ip(request):
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR")
+
+
 def _get_criterios(usuario):
     return CriterioEdital.objects.filter(
         modalidade=usuario.vinculo,
@@ -75,7 +82,59 @@ def inscricao_view(request):
                 itens_existentes[item.criterio_id] = item.pontuacao
         return _render_form(request, InscricaoForm(usuario=usuario), criterios, inscricao, itens_existentes)
 
-    # POST — implemented in Task 5
+    # POST
+    action = request.POST.get("action", "rascunho")
+    form = InscricaoForm(request.POST, request.FILES, usuario=usuario, acao=action)
+
+    if not form.is_valid():
+        scores, _ = _parse_scores(request.POST, criterios)
+        return _render_form(request, form, criterios, inscricao, scores)
+
+    with transaction.atomic():
+        if inscricao is None:
+            inscricao = Inscricao(usuario=usuario, modalidade=usuario.vinculo)
+
+        if usuario.vinculo == Vinculo.SERVIDOR:
+            inscricao.tipo_servidor = form.cleaned_data["tipo_servidor"]
+
+        pdf = form.cleaned_data.get("comprovantes_pdf")
+        if pdf:
+            inscricao.comprovantes_pdf = pdf
+            inscricao.comprovantes_pdf_nome_original = pdf.name
+            inscricao.comprovantes_pdf_tamanho = pdf.size
+            inscricao.comprovantes_pdf_mime = getattr(pdf, "content_type", "application/pdf")
+
+        scores, total = _parse_scores(request.POST, criterios)
+        inscricao.total = total
+
+        if action == "enviar":
+            inscricao.status = StatusInscricao.EM_ANALISE
+            inscricao.enviada_em = timezone.now()
+        else:
+            inscricao.status = StatusInscricao.PENDENTE
+
+        inscricao.save()
+
+        for criterio in criterios:
+            InscricaoItem.objects.update_or_create(
+                inscricao=inscricao,
+                criterio=criterio,
+                defaults={"pontuacao": scores[criterio.pk]},
+            )
+
+        AuditLog.objects.create(
+            ator=usuario,
+            acao=AuditAction.INSCRICAO_SALVA,
+            ip=_get_client_ip(request),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            detalhes={"action": action, "total": str(total)},
+        )
+
+    if action == "enviar":
+        messages.success(request, "Inscrição enviada com sucesso!")
+        return redirect("inscricao_confirmacao")
+
+    messages.success(request, "Rascunho salvo com sucesso.")
     return redirect("inscricao")
 
 
