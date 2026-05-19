@@ -2,6 +2,8 @@
 # Banco de Talentos — Polo de Inovação IFG
 # Formulário de inscrição: valida PDF, tipo_servidor e aceite de envio.
 
+from pathlib import Path
+
 from django import forms
 from django.core.exceptions import ValidationError
 
@@ -36,7 +38,7 @@ class InscricaoForm(forms.Form):
         pdf = self.cleaned_data.get("comprovantes_pdf")
         if not pdf:
             return pdf
-        if not pdf.name.lower().endswith(".pdf"):
+        if Path(pdf.name).suffix.lower() != ".pdf":
             raise ValidationError("Apenas arquivos com extensão .pdf são aceitos.")
         if pdf.size > MAX_PDF_SIZE:
             mb = pdf.size // 1024 // 1024

@@ -242,3 +242,31 @@ class InscricaoFormTest(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn("aceite_envio", form.errors)
+
+    def test_tipo_servidor_valido_aceito_para_servidor(self):
+        from apps.inscricoes.models import TipoServidor
+        form = InscricaoForm(
+            {"tipo_servidor": TipoServidor.PESQUISADOR, "aceite_envio": False},
+            usuario=self._usuario(Vinculo.SERVIDOR),
+            acao="rascunho",
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_aceite_envio_true_com_enviar_valido(self):
+        form = InscricaoForm(
+            {"tipo_servidor": "", "aceite_envio": True},
+            usuario=self._usuario(),
+            acao="enviar",
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_extensao_errada_com_magic_bytes_pdf_rejeitada(self):
+        exe = SimpleUploadedFile("malware.exe", b"%PDF-1.4 content", content_type="application/pdf")
+        form = InscricaoForm(
+            {"tipo_servidor": "", "aceite_envio": False},
+            files={"comprovantes_pdf": exe},
+            usuario=self._usuario(),
+            acao="rascunho",
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("comprovantes_pdf", form.errors)
