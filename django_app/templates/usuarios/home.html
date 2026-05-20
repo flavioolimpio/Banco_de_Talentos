@@ -4,20 +4,22 @@
 {% block title %}Início - Banco de Talentos IFG{% endblock %}
 
 {% block page_content %}
-<div style="max-width:640px;margin:32px auto;padding:0 16px">
+<div style="padding:32px 32px 0">
     <h2 style="margin:0 0 4px;color:#202124">
         Olá, {{ request.user.nome_completo|truncatewords:1|cut:" …" }}!
     </h2>
-    <p style="color:#666;margin:0 0 24px;font-size:14px">
+    <p style="color:#666;margin:0 0 20px;font-size:14px">
         Modalidade: <strong>{{ request.user.get_vinculo_display }}</strong>
     </p>
+</div>
 
-    <img src="{% static 'imagens/home.png' %}"
-         alt="Banco de Talentos IFG"
-         style="width:100%;max-width:640px;border-radius:10px;margin-bottom:24px;display:block">
+<img src="{% static 'imagens/home.png' %}"
+     alt="Banco de Talentos IFG"
+     style="width:100%;display:block;margin-bottom:24px">
 
+<div style="max-width:640px;margin:0 auto;padding:0 32px 32px">
     <div style="border:1px solid #e0e0e0;border-radius:10px;padding:20px;display:flex;align-items:center;gap:16px">
-        <div style="flex:1">
+        <div style="flex:1;text-align:justify">
             <div style="font-weight:600;color:#202124;margin-bottom:6px">Minha inscri&ccedil;&atilde;o</div>
             {% if inscricao %}
                 {% if inscricao.status == "pendente" %}
@@ -44,7 +46,7 @@
         {% endif %}
     </div>
 
-    <p style="color:#888;font-size:12px;margin:10px 0 0;text-align:center">
+    <p style="color:#888;font-size:12px;margin:10px 0 0;text-align:justify">
         Ap&oacute;s preencher e enviar, sua inscri&ccedil;&atilde;o ser&aacute; analisada pelo time de RH.
     </p>
 </div>
