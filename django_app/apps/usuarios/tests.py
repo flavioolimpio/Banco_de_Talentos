@@ -77,6 +77,10 @@ class HomeViewTest(TestCase):
         response = self.client.get(reverse("home"))
         self.assertContains(response, reverse("inscricao_confirmacao"))
 
+    def test_home_exibe_imagem_home(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "imagens/home.png")
+
 
 class SidebarTest(TestCase):
     def setUp(self):
