@@ -44,7 +44,13 @@ class PopularCriteriosCommandTest(TestCase):
     def test_cria_criterios_servidor(self):
         call_command("popular_criterios", verbosity=0)
         self.assertEqual(
-            CriterioEdital.objects.filter(modalidade="servidor").count(), 13
+            CriterioEdital.objects.filter(modalidade="servidor", tipo_servidor="").count(), 13
+        )
+
+    def test_cria_criterios_servidor_apoio_tecnico(self):
+        call_command("popular_criterios", verbosity=0)
+        self.assertEqual(
+            CriterioEdital.objects.filter(modalidade="servidor", tipo_servidor="apoio_tecnico").count(), 8
         )
 
     def test_cria_criterios_estudante(self):
@@ -59,14 +65,14 @@ class PopularCriteriosCommandTest(TestCase):
             CriterioEdital.objects.filter(modalidade="colaborador_externo").count(), 9
         )
 
-    def test_total_30_criterios(self):
+    def test_total_38_criterios(self):
         call_command("popular_criterios", verbosity=0)
-        self.assertEqual(CriterioEdital.objects.count(), 30)
+        self.assertEqual(CriterioEdital.objects.count(), 38)
 
     def test_idempotente_sem_duplicar(self):
         call_command("popular_criterios", verbosity=0)
         call_command("popular_criterios", verbosity=0)
-        self.assertEqual(CriterioEdital.objects.count(), 30)
+        self.assertEqual(CriterioEdital.objects.count(), 38)
 
     def test_campos_salvos_corretamente(self):
         call_command("popular_criterios", verbosity=0)

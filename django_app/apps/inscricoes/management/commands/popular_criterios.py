@@ -14,12 +14,17 @@ class Command(BaseCommand):
         criados = 0
         atualizados = 0
 
-        for modalidade, itens in QUADROS_INSCRICAO.items():
+        for modalidade_key, itens in QUADROS_INSCRICAO.items():
+            if modalidade_key == "servidor_apoio_tecnico":
+                modalidade = "servidor"
+                tipo_servidor = "apoio_tecnico"
+            else:
+                modalidade = modalidade_key
+                tipo_servidor = ""
             for ordem, item in enumerate(itens, start=1):
-                # tipo_servidor="" aplica a ambos os tipos de servidor (mesmo quadro no edital atual)
                 _, created = CriterioEdital.objects.update_or_create(
                     modalidade=modalidade,
-                    tipo_servidor="",
+                    tipo_servidor=tipo_servidor,
                     item_id=item["id"],
                     defaults={
                         "ordem": ordem,

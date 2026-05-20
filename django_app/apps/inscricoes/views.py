@@ -26,10 +26,10 @@ def _get_client_ip(request):
     return request.META.get("REMOTE_ADDR")
 
 
-def _get_criterios(usuario):
+def _get_criterios(usuario, tipo_servidor=""):
     return CriterioEdital.objects.filter(
         modalidade=usuario.vinculo,
-        tipo_servidor="",
+        tipo_servidor=tipo_servidor,
         ativo=True,
     ).order_by("ordem")
 
@@ -75,9 +75,9 @@ def inscricao_view(request):
     except Inscricao.DoesNotExist:
         inscricao = None
 
-    criterios = list(_get_criterios(usuario))
-
     if request.method == "GET":
+        tipo_servidor = inscricao.tipo_servidor if inscricao else ""
+        criterios = list(_get_criterios(usuario, tipo_servidor))
         itens_existentes = {}
         if inscricao:
             for item in inscricao.itens.select_related("criterio"):
@@ -86,6 +86,8 @@ def inscricao_view(request):
 
     # POST
     action = request.POST.get("action", "rascunho")
+    tipo_servidor = request.POST.get("tipo_servidor", "") if usuario.vinculo == Vinculo.SERVIDOR else ""
+    criterios = list(_get_criterios(usuario, tipo_servidor))
     form = InscricaoForm(request.POST, request.FILES, usuario=usuario, acao=action)
 
     if not form.is_valid():
