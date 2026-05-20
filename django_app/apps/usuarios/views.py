@@ -110,7 +110,7 @@ def meu_cadastro_view(request):
     if request.method == "POST" and form.is_valid():
         instance = form.save(commit=False)
         instance.save(update_fields=campos_aba)
-        audit(request, AuditAction.CADASTRO_ATUALIZADO, alvo=request.user)
+        audit(request, AuditAction.CADASTRO_ATUALIZADO, alvo=request.user, detalhes={"aba": aba})
         messages.success(request, "Dados atualizados com sucesso.")
         return redirect(f"{reverse('meu_cadastro')}?aba={aba}")
 

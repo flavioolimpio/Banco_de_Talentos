@@ -216,3 +216,44 @@ class MeuCadastroViewTest(TestCase):
         self.client.logout()
         response = self.client.get(reverse("meu_cadastro"))
         self.assertRedirects(response, f"{reverse('login')}?next={reverse('meu_cadastro')}")
+
+    def test_post_cross_tab_nao_salva_campo_de_outra_aba(self):
+        """POST com cep para ?aba=dados NÃO deve persistir o cep."""
+        self.user.cep = "75000000"
+        self.user.save(update_fields=["cep"])
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=dados",
+            {"nome_completo": "Novo Nome", "cep": "99999999"},
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.cep, "75000000")
+
+    def test_post_nao_altera_cpf(self):
+        """CPF nunca pode ser alterado via POST."""
+        cpf_original = self.user.cpf
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=dados",
+            {"nome_completo": "X", "cpf": "11144477735"},
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.cpf, cpf_original)
+
+    def test_get_aba_invalida_usa_aba_dados(self):
+        """?aba=hacker deve ser tratado como ?aba=dados."""
+        response = self.client.get(reverse("meu_cadastro") + "?aba=hacker")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Dados Pessoais")
+
+    def test_post_registra_auditlog(self):
+        """Salvar cadastro deve criar um AuditLog com CADASTRO_ATUALIZADO."""
+        from apps.auditoria.models import AuditLog, AuditAction
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=dados",
+            {"nome_completo": "Log Teste"},
+        )
+        self.assertTrue(
+            AuditLog.objects.filter(
+                ator=self.user,
+                acao=AuditAction.CADASTRO_ATUALIZADO,
+            ).exists()
+        )
