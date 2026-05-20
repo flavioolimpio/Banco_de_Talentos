@@ -139,3 +139,80 @@ class MeuCadastroFormTest(TestCase):
         from apps.usuarios.forms import MeuCadastroForm
         form = MeuCadastroForm(instance=self.user)
         self.assertNotIn("vinculo", form.fields)
+
+
+class MeuCadastroViewTest(TestCase):
+    def setUp(self):
+        self.user = Usuario.objects.create_user(
+            cpf="52998224725",
+            email="mcadastro@test.com",
+            nome_completo="Cadastro Teste",
+            vinculo=Vinculo.SERVIDOR,
+            password="senha123",
+        )
+        self.client.force_login(self.user)
+
+    def test_get_retorna_200(self):
+        response = self.client.get(reverse("meu_cadastro"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_get_exibe_nome_usuario(self):
+        response = self.client.get(reverse("meu_cadastro"))
+        self.assertContains(response, "Cadastro Teste")
+
+    def test_get_exibe_cpf_formatado(self):
+        response = self.client.get(reverse("meu_cadastro"))
+        self.assertContains(response, "529.982.247-25")
+
+    def test_get_aba_padrao_e_dados(self):
+        response = self.client.get(reverse("meu_cadastro"))
+        self.assertContains(response, "Dados Pessoais")
+
+    def test_get_aba_endereco(self):
+        response = self.client.get(reverse("meu_cadastro") + "?aba=endereco")
+        self.assertContains(response, "CEP")
+
+    def test_get_aba_formacao(self):
+        response = self.client.get(reverse("meu_cadastro") + "?aba=formacao")
+        self.assertContains(response, "Lattes")
+
+    def test_post_salva_nome_completo(self):
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=dados",
+            {"nome_completo": "Nome Atualizado", "telefone": ""},
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.nome_completo, "Nome Atualizado")
+
+    def test_post_nao_altera_email(self):
+        email_original = self.user.email
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=dados",
+            {"nome_completo": "X", "email": "hacker@evil.com"},
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, email_original)
+
+    def test_post_nao_altera_vinculo(self):
+        vinculo_original = self.user.vinculo
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=dados",
+            {"nome_completo": "X", "vinculo": "estudante"},
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.vinculo, vinculo_original)
+
+    def test_post_salva_apenas_aba_dados_sem_sobrescrever_endereco(self):
+        self.user.cep = "75000000"
+        self.user.save(update_fields=["cep"])
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=dados",
+            {"nome_completo": "Novo Nome"},
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.cep, "75000000")
+
+    def test_get_sem_login_redireciona(self):
+        self.client.logout()
+        response = self.client.get(reverse("meu_cadastro"))
+        self.assertRedirects(response, f"{reverse('login')}?next={reverse('meu_cadastro')}")

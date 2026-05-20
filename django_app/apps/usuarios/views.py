@@ -3,11 +3,11 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import PasswordResetConfirmView, PasswordResetDoneView, PasswordResetView
 from django.shortcuts import redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.views.decorators.http import require_http_methods
 
 from apps.auditoria.models import AuditAction, AuditLog
-from apps.usuarios.forms import CadastroUsuarioForm, LoginForm, NovaSenhaForm, RecuperacaoSenhaForm
+from apps.usuarios.forms import CadastroUsuarioForm, LoginForm, MeuCadastroForm, NovaSenhaForm, RecuperacaoSenhaForm
 
 
 LGPD_TERMO_VERSAO_ATUAL = "2026-05-14"
@@ -87,10 +87,42 @@ def home_view(request):
     return render(request, "usuarios/home.html", {"inscricao": inscricao})
 
 
+_ABAS_CAMPOS = {
+    "dados": [
+        "nome_completo", "telefone", "data_nascimento",
+        "rg", "orgao_emissor", "genero", "resumo",
+    ],
+    "endereco": ["cep", "endereco", "numero", "complemento", "bairro", "cidade", "uf"],
+    "formacao": ["nivel_formacao", "area_atuacao", "lattes", "linkedin", "instituicao"],
+}
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def meu_cadastro_view(request):
-    return render(request, "usuarios/meu_cadastro.html", {})
+    aba = request.GET.get("aba", "dados")
+    if aba not in _ABAS_CAMPOS:
+        aba = "dados"
+    campos_aba = _ABAS_CAMPOS[aba]
+
+    form = MeuCadastroForm(request.POST or None, instance=request.user)
+
+    if request.method == "POST" and form.is_valid():
+        instance = form.save(commit=False)
+        instance.save(update_fields=campos_aba)
+        audit(request, AuditAction.CADASTRO_ATUALIZADO, alvo=request.user)
+        messages.success(request, "Dados atualizados com sucesso.")
+        return redirect(f"{reverse('meu_cadastro')}?aba={aba}")
+
+    cpf = request.user.cpf
+    cpf_formatado = f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}"
+
+    return render(request, "usuarios/meu_cadastro.html", {
+        "form": form,
+        "aba": aba,
+        "campos_aba": campos_aba,
+        "cpf_formatado": cpf_formatado,
+    })
 
 
 class RecuperacaoSenhaView(PasswordResetView):
