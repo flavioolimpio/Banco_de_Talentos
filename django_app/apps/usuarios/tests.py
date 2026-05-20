@@ -76,3 +76,28 @@ class HomeViewTest(TestCase):
         )
         response = self.client.get(reverse("home"))
         self.assertContains(response, reverse("inscricao_confirmacao"))
+
+
+class SidebarTest(TestCase):
+    def setUp(self):
+        self.user = Usuario.objects.create_user(
+            cpf="52998224725",
+            email="sidebar@test.com",
+            nome_completo="Usuário Sidebar",
+            vinculo=Vinculo.SERVIDOR,
+            password="senha123",
+        )
+        self.client.force_login(self.user)
+
+    def test_home_tem_sidebar(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, 'class="sidebar"')
+
+    def test_home_tem_link_inscricao_na_sidebar(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, reverse("inscricao"))
+
+    def test_login_nao_tem_sidebar(self):
+        self.client.logout()
+        response = self.client.get(reverse("login"))
+        self.assertNotContains(response, 'class="sidebar"')

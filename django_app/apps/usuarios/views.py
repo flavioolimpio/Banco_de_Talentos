@@ -87,6 +87,12 @@ def home_view(request):
     return render(request, "usuarios/home.html", {"inscricao": inscricao})
 
 
+@login_required
+@require_http_methods(["GET", "POST"])
+def meu_cadastro_view(request):
+    return render(request, "usuarios/meu_cadastro.html", {})
+
+
 class RecuperacaoSenhaView(PasswordResetView):
     form_class = RecuperacaoSenhaForm
     template_name = "usuarios/password_reset_form.html"
