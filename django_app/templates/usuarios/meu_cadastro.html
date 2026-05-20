@@ -1,0 +1,56 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Meu Cadastro - Banco de Talentos IFG{% endblock %}
+
+{% block page_content %}
+<div style="max-width:640px;margin:32px auto;padding:0 16px">
+    <h2 style="margin:0 0 20px;color:#202124">Meu Cadastro</h2>
+
+    <div style="background:#f0f0f0;border-radius:8px;padding:14px 16px;margin-bottom:24px;font-size:13px;color:#555">
+        <div style="display:flex;gap:24px;flex-wrap:wrap">
+            <div><strong>CPF:</strong> {{ cpf_formatado }}</div>
+            <div><strong>E-mail:</strong> {{ request.user.email }}</div>
+            <div><strong>V&iacute;nculo:</strong> {{ request.user.get_vinculo_display }}</div>
+        </div>
+        <div style="font-size:11px;color:#999;margin-top:6px">Esses campos n&atilde;o podem ser alterados.</div>
+    </div>
+
+    <div style="display:flex;border-bottom:2px solid #e0e0e0;margin-bottom:24px">
+        <a href="?aba=dados"
+           style="padding:10px 20px;text-decoration:none;font-size:14px;
+                  {% if aba == 'dados' %}font-weight:600;color:#168241;border-bottom:2px solid #168241;margin-bottom:-2px{% else %}color:#666{% endif %}">
+            Dados Pessoais
+        </a>
+        <a href="?aba=endereco"
+           style="padding:10px 20px;text-decoration:none;font-size:14px;
+                  {% if aba == 'endereco' %}font-weight:600;color:#168241;border-bottom:2px solid #168241;margin-bottom:-2px{% else %}color:#666{% endif %}">
+            Endere&ccedil;o
+        </a>
+        <a href="?aba=formacao"
+           style="padding:10px 20px;text-decoration:none;font-size:14px;
+                  {% if aba == 'formacao' %}font-weight:600;color:#168241;border-bottom:2px solid #168241;margin-bottom:-2px{% else %}color:#666{% endif %}">
+            Forma&ccedil;&atilde;o
+        </a>
+    </div>
+
+    <form method="post" action="?aba={{ aba }}" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% for field in form %}
+            {% if field.html_name in campos_aba %}
+            <div style="margin-bottom:16px">
+                <label for="{{ field.id_for_label }}"
+                       style="font-weight:600;display:block;margin-bottom:4px;font-size:14px;color:#202124">
+                    {{ field.label }}
+                </label>
+                {{ field }}
+                {{ field.errors }}
+            </div>
+            {% endif %}
+        {% endfor %}
+        <div style="margin-top:24px">
+            <button type="submit" class="primary-button">Salvar altera&ccedil;&otilde;es</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

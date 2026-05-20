@@ -1,63 +1,51 @@
-{% extends "base.html" %}
+{% extends "base_dashboard.html" %}
+{% load static %}
 
 {% block title %}Início - Banco de Talentos IFG{% endblock %}
 
-{% block content %}
-<section class="dashboard-shell">
-    <nav class="topbar">
-        <div>
-            <strong>Banco de Talentos</strong>
-            <span> · Polo de Inovação IFG</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px">
-            <span>{{ request.user.nome_completo }}</span>
-            <form method="post" action="{% url 'logout' %}">
-                {% csrf_token %}
-                <button type="submit" class="secondary-button">Sair</button>
-            </form>
-        </div>
-    </nav>
+{% block page_content %}
+<div style="max-width:640px;margin:32px auto;padding:0 16px">
+    <h2 style="margin:0 0 4px;color:#202124">
+        Olá, {{ request.user.nome_completo|truncatewords:1|cut:" …" }}!
+    </h2>
+    <p style="color:#666;margin:0 0 24px;font-size:14px">
+        Modalidade: <strong>{{ request.user.get_vinculo_display }}</strong>
+    </p>
 
-    <div style="max-width:640px;margin:32px auto;padding:0 16px">
-        <h2 style="margin:0 0 4px;color:#202124">
-            Olá, {{ request.user.nome_completo|truncatewords:1|cut:" …" }}!
-        </h2>
-        <p style="color:#666;margin:0 0 24px;font-size:14px">
-            Modalidade: <strong>{{ request.user.get_vinculo_display }}</strong>
-        </p>
+    <img src="{% static 'imagens/home.png' %}"
+         alt="Banco de Talentos IFG"
+         style="width:100%;max-width:640px;border-radius:10px;margin-bottom:24px;display:block">
 
-        <div style="border:1px solid #e0e0e0;border-radius:10px;padding:20px;display:flex;align-items:center;gap:16px">
-            <div style="font-size:32px">📋</div>
-            <div style="flex:1">
-                <div style="font-weight:600;color:#202124;margin-bottom:6px">Minha inscrição</div>
-                {% if inscricao %}
-                    {% if inscricao.status == "pendente" %}
-                        <span style="background:#fff3cd;color:#856404;padding:3px 12px;border-radius:12px;font-size:13px;font-weight:600">● Pendente</span>
-                    {% elif inscricao.status == "completa" %}
-                        <span style="background:#cfe2ff;color:#084298;padding:3px 12px;border-radius:12px;font-size:13px;font-weight:600">● Pronta para envio</span>
-                    {% elif inscricao.status == "em_analise" %}
-                        <span style="background:#d6f000;color:#202124;padding:3px 12px;border-radius:12px;font-size:13px;font-weight:600">● Em análise</span>
-                    {% elif inscricao.status == "aprovada" %}
-                        <span style="background:#168241;color:#fff;padding:3px 12px;border-radius:12px;font-size:13px;font-weight:600">● Aprovada</span>
-                    {% elif inscricao.status == "indeferida" %}
-                        <span style="background:#dc3545;color:#fff;padding:3px 12px;border-radius:12px;font-size:13px;font-weight:600">● Indeferida</span>
-                    {% endif %}
-                {% else %}
-                    <span style="background:#f0f0f0;color:#666;padding:3px 12px;border-radius:12px;font-size:13px">Ainda não iniciada</span>
+    <div style="border:1px solid #e0e0e0;border-radius:10px;padding:20px;display:flex;align-items:center;gap:16px">
+        <div style="flex:1">
+            <div style="font-weight:600;color:#202124;margin-bottom:6px">Minha inscri&ccedil;&atilde;o</div>
+            {% if inscricao %}
+                {% if inscricao.status == "pendente" %}
+                    <span style="background:#fff3cd;color:#856404;padding:3px 12px;border-radius:12px;font-size:13px;font-weight:600">&#9679; Pendente</span>
+                {% elif inscricao.status == "completa" %}
+                    <span style="background:#cfe2ff;color:#084298;padding:3px 12px;border-radius:12px;font-size:13px;font-weight:600">&#9679; Pronta para envio</span>
+                {% elif inscricao.status == "em_analise" %}
+                    <span style="background:#d6f000;color:#202124;padding:3px 12px;border-radius:12px;font-size:13px;font-weight:600">&#9679; Em an&aacute;lise</span>
+                {% elif inscricao.status == "aprovada" %}
+                    <span style="background:#168241;color:#fff;padding:3px 12px;border-radius:12px;font-size:13px;font-weight:600">&#9679; Aprovada</span>
+                {% elif inscricao.status == "indeferida" %}
+                    <span style="background:#dc3545;color:#fff;padding:3px 12px;border-radius:12px;font-size:13px;font-weight:600">&#9679; Indeferida</span>
                 {% endif %}
-            </div>
-            {% if inscricao and inscricao.enviada_em %}
-                <a href="{% url 'inscricao_confirmacao' %}" class="primary-button">Ver confirmação →</a>
             {% else %}
-                <a href="{% url 'inscricao' %}" class="primary-button">
-                    {% if inscricao %}Continuar inscrição →{% else %}Iniciar inscrição →{% endif %}
-                </a>
+                <span style="background:#f0f0f0;color:#666;padding:3px 12px;border-radius:12px;font-size:13px">Ainda n&atilde;o iniciada</span>
             {% endif %}
         </div>
-
-        <p style="color:#888;font-size:12px;margin:10px 0 0;text-align:center">
-            Após preencher e enviar, sua inscrição será analisada pelo time de RH.
-        </p>
+        {% if inscricao and inscricao.enviada_em %}
+            <a href="{% url 'inscricao_confirmacao' %}" class="primary-button">Ver confirma&ccedil;&atilde;o &rarr;</a>
+        {% else %}
+            <a href="{% url 'inscricao' %}" class="primary-button">
+                {% if inscricao %}Continuar inscri&ccedil;&atilde;o &rarr;{% else %}Iniciar inscri&ccedil;&atilde;o &rarr;{% endif %}
+            </a>
+        {% endif %}
     </div>
-</section>
+
+    <p style="color:#888;font-size:12px;margin:10px 0 0;text-align:center">
+        Ap&oacute;s preencher e enviar, sua inscri&ccedil;&atilde;o ser&aacute; analisada pelo time de RH.
+    </p>
+</div>
 {% endblock %}
