@@ -30,7 +30,7 @@
     </div>
     {% endif %}
     <div class="dashboard-layout">
-        <aside class="sidebar">
+        {% if request.user.is_authenticated %}<aside class="sidebar">
             <div class="sidebar-brand">
                 <div class="sidebar-title">Banco de Talentos</div>
                 <div class="sidebar-subtitle">Polo de Inovação IFG</div>
@@ -56,7 +56,7 @@
                     </form>
                 </div>
             </nav>
-        </aside>
+        </aside>{% endif %}
         <div class="dashboard-content">
             {% block page_content %}{% endblock %}
         </div>
