@@ -105,3 +105,37 @@ class SidebarTest(TestCase):
         self.client.logout()
         response = self.client.get(reverse("login"))
         self.assertNotContains(response, 'class="sidebar"')
+
+
+class MeuCadastroFormTest(TestCase):
+    def setUp(self):
+        self.user = Usuario.objects.create_user(
+            cpf="52998224725",
+            email="formtest@test.com",
+            nome_completo="Form Teste",
+            vinculo=Vinculo.SERVIDOR,
+            password="senha123",
+        )
+
+    def test_form_salva_nome_completo(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(
+            {"nome_completo": "Novo Nome", "telefone": "", "resumo": ""},
+            instance=self.user,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_form_nao_tem_campo_cpf(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(instance=self.user)
+        self.assertNotIn("cpf", form.fields)
+
+    def test_form_nao_tem_campo_email(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(instance=self.user)
+        self.assertNotIn("email", form.fields)
+
+    def test_form_nao_tem_campo_vinculo(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(instance=self.user)
+        self.assertNotIn("vinculo", form.fields)

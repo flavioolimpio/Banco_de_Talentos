@@ -105,3 +105,30 @@ class RecuperacaoSenhaForm(PasswordResetForm):
 
 class NovaSenhaForm(SetPasswordForm):
     pass
+
+
+class MeuCadastroForm(forms.ModelForm):
+    class Meta:
+        model = Usuario
+        fields = [
+            "nome_completo", "telefone", "data_nascimento", "rg",
+            "orgao_emissor", "genero", "resumo",
+            "cep", "endereco", "numero", "complemento",
+            "bairro", "cidade", "uf",
+            "nivel_formacao", "area_atuacao", "lattes", "linkedin", "instituicao",
+        ]
+        widgets = {
+            "data_nascimento": forms.DateInput(
+                attrs={"type": "date"}, format="%Y-%m-%d"
+            ),
+            "resumo": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.data_nascimento:
+            self.initial["data_nascimento"] = self.instance.data_nascimento.strftime(
+                "%Y-%m-%d"
+            )
+        for field in self.fields.values():
+            field.required = False
