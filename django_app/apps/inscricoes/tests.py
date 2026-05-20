@@ -519,3 +519,34 @@ class InscricaoDownloadTest(TestCase):
     def test_media_direta_retorna_404(self):
         response = self.client.get("/media/comprovantes/estudante/11144477735/comp.pdf")
         self.assertEqual(response.status_code, 404)
+
+
+class SidebarInscricaoTest(TestCase):
+    def setUp(self):
+        from apps.usuarios.models import Usuario, Vinculo
+        from apps.inscricoes.management.commands.popular_criterios import Command
+        self.user = Usuario.objects.create_user(
+            cpf="52998224725",
+            email="sidebar_insc@test.com",
+            nome_completo="Teste Sidebar",
+            vinculo=Vinculo.ESTUDANTE,
+            password="senha123",
+        )
+        Command().handle(verbosity=0)
+        self.client.force_login(self.user)
+
+    def test_formulario_tem_sidebar(self):
+        response = self.client.get(reverse("inscricao"))
+        self.assertContains(response, 'class="sidebar"')
+
+    def test_confirmacao_tem_sidebar(self):
+        from apps.inscricoes.models import Inscricao, StatusInscricao
+        from django.utils import timezone
+        inscricao = Inscricao.objects.create(
+            usuario=self.user,
+            modalidade="estudante",
+            status=StatusInscricao.EM_ANALISE,
+            enviada_em=timezone.now(),
+        )
+        response = self.client.get(reverse("inscricao_confirmacao"))
+        self.assertContains(response, 'class="sidebar"')
