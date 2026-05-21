@@ -6,6 +6,8 @@ from django import forms
 
 
 class RevisaoForm(forms.Form):
+    VALID_ACOES = frozenset({"aprovar", "indeferir"})
+
     parecer_geral = forms.CharField(
         label="Parecer geral",
         widget=forms.Textarea(attrs={
@@ -22,6 +24,8 @@ class RevisaoForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
+        if self.acao not in self.VALID_ACOES:
+            return cleaned
         if self.acao == "indeferir" and not cleaned.get("parecer_geral", "").strip():
             self.add_error("parecer_geral", "O parecer é obrigatório ao indeferir.")
         return cleaned
