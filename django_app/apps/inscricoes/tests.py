@@ -556,3 +556,34 @@ class SidebarInscricaoTest(TestCase):
         )
         response = self.client.get(reverse("inscricao_confirmacao"))
         self.assertContains(response, 'class="sidebar"')
+
+
+class InscricaoNovoCamposTest(TestCase):
+    def setUp(self):
+        self.usuario = User.objects.create_user(
+            cpf="11144477735",
+            email="cand@test.com",
+            nome_completo="Candidato",
+            vinculo="estudante",
+            password="Pass123!",
+        )
+        self.inscricao = Inscricao.objects.create(
+            usuario=self.usuario,
+            modalidade="estudante",
+        )
+
+    def test_total_validado_default_zero(self):
+        self.assertEqual(self.inscricao.total_validado, Decimal("0"))
+
+    def test_parecer_geral_default_vazio(self):
+        self.assertEqual(self.inscricao.parecer_geral, "")
+
+    def test_revisado_em_default_none(self):
+        self.assertIsNone(self.inscricao.revisado_em)
+
+    def test_revisado_por_default_none(self):
+        self.assertIsNone(self.inscricao.revisado_por)
+
+    def test_auditaction_inscricao_revisada_existe(self):
+        from apps.auditoria.models import AuditAction
+        self.assertIn("inscricao_revisada", [c for c, _ in AuditAction.choices])

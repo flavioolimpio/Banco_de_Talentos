@@ -74,6 +74,19 @@ class Inscricao(models.Model):
         blank=True,
     )
     total = models.DecimalField("pontuação total", max_digits=9, decimal_places=2, default=0)
+    total_validado = models.DecimalField(
+        "pontuação total validada", max_digits=9, decimal_places=2, default=0
+    )
+    parecer_geral = models.TextField("parecer geral", blank=True)
+    revisado_em = models.DateTimeField("revisado em", null=True, blank=True)
+    revisado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inscricoes_revisadas",
+        verbose_name="revisado por",
+    )
     status = models.CharField(
         "status",
         max_length=30,

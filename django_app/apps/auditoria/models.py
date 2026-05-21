@@ -14,6 +14,7 @@ class AuditAction(models.TextChoices):
     CSV_EXPORTADO = "csv_exportado", "CSV exportado"
     DADOS_EXPORTADOS_TITULAR = "dados_exportados_titular", "Dados do titular exportados"
     DADOS_EXCLUIDOS_TITULAR = "dados_excluidos_titular", "Dados do titular excluídos"
+    INSCRICAO_REVISADA = "inscricao_revisada", "Inscrição revisada"
 
 
 class AuditLog(models.Model):
