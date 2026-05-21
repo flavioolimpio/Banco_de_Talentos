@@ -8,7 +8,7 @@
 .revisao-wrapper {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 0px);   /* ocupa o viewport disponível */
+    height: 100%;   /* ocupa o espaço disponível dentro de .dashboard-content (flex item) */
     overflow: hidden;
 }
 
@@ -385,6 +385,10 @@
                             </div>
 
                         </div>
+                    </div>
+                    {% empty %}
+                    <div style="padding:20px;text-align:center;color:#856404;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;margin-bottom:12px">
+                        Esta inscrição não possui critérios cadastrados. Revise manualmente antes de tomar uma decisão.
                     </div>
                     {% endfor %}
 
