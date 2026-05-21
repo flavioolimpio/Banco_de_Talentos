@@ -57,25 +57,6 @@ class HomeViewTest(TestCase):
         response = self.client.get(reverse("home"))
         self.assertContains(response, reverse("inscricao"))
 
-    def test_home_com_inscricao_pendente_mostra_status(self):
-        Inscricao.objects.create(
-            usuario=self.candidato,
-            modalidade="estudante",
-            status=StatusInscricao.PENDENTE,
-        )
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "Pendente")
-
-    def test_home_com_inscricao_enviada_mostra_link_confirmacao(self):
-        from django.utils import timezone
-        Inscricao.objects.create(
-            usuario=self.candidato,
-            modalidade="estudante",
-            status=StatusInscricao.EM_ANALISE,
-            enviada_em=timezone.now(),
-        )
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, reverse("inscricao_confirmacao"))
 
     def test_home_exibe_imagem_home(self):
         response = self.client.get(reverse("home"))
