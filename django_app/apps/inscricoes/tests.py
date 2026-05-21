@@ -610,3 +610,123 @@ class RevisaoFormTest(TestCase):
         from apps.inscricoes.forms_rh import RevisaoForm
         form = RevisaoForm({"parecer_geral": "   "}, acao="indeferir")
         self.assertFalse(form.is_valid())
+
+
+from django.core.management import call_command
+
+
+class RevisaoViewTest(TestCase):
+    def setUp(self):
+        call_command("popular_criterios", verbosity=0)
+        self.revisor = User.objects.create_user(
+            cpf="52998224725",
+            email="revisor@ifg.edu.br",
+            nome_completo="Revisor RH",
+            password="Revisor123!",
+            is_staff=True,
+        )
+        self.candidato = User.objects.create_user(
+            cpf="11144477735",
+            email="cand@test.com",
+            nome_completo="João Silva",
+            vinculo="estudante",
+            password="Cand123!",
+        )
+        self.inscricao = Inscricao.objects.create(
+            usuario=self.candidato,
+            modalidade="estudante",
+            status=StatusInscricao.EM_ANALISE,
+            total=Decimal("30.00"),
+        )
+        from apps.inscricoes.models import InscricaoItem
+        criterios = list(
+            CriterioEdital.objects.filter(modalidade="estudante").order_by("ordem")
+        )
+        for c in criterios:
+            InscricaoItem.objects.create(
+                inscricao=self.inscricao,
+                criterio=c,
+                pontuacao=Decimal("5.00"),
+            )
+        self.url = f"/rh/inscricoes/{self.inscricao.pk}/revisar/"
+
+    def _scores_post(self):
+        from apps.inscricoes.models import InscricaoItem
+        itens = InscricaoItem.objects.filter(inscricao=self.inscricao)
+        return {f"validado_{item.pk}": "5.0" for item in itens}
+
+    def test_get_requer_staff(self):
+        self.client.force_login(self.candidato)
+        response = self.client.get(self.url)
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_get_retorna_200_para_staff(self):
+        self.client.force_login(self.revisor)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_get_inscricao_nao_em_analise_redireciona(self):
+        self.inscricao.status = StatusInscricao.PENDENTE
+        self.inscricao.save()
+        self.client.force_login(self.revisor)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+
+    def test_post_aprovar_muda_status(self):
+        self.client.force_login(self.revisor)
+        data = {"parecer_geral": "", "acao": "aprovar", **self._scores_post()}
+        self.client.post(self.url, data)
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.status, StatusInscricao.APROVADA)
+
+    def test_post_indeferir_muda_status(self):
+        self.client.force_login(self.revisor)
+        data = {"parecer_geral": "Docs incompletos.", "acao": "indeferir", **self._scores_post()}
+        self.client.post(self.url, data)
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.status, StatusInscricao.INDEFERIDA)
+
+    def test_post_salva_total_validado(self):
+        self.client.force_login(self.revisor)
+        data = {"parecer_geral": "", "acao": "aprovar", **self._scores_post()}
+        self.client.post(self.url, data)
+        self.inscricao.refresh_from_db()
+        self.assertGreater(self.inscricao.total_validado, 0)
+
+    def test_post_salva_revisado_por(self):
+        self.client.force_login(self.revisor)
+        data = {"parecer_geral": "", "acao": "aprovar", **self._scores_post()}
+        self.client.post(self.url, data)
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.revisado_por, self.revisor)
+
+    def test_post_registra_auditlog(self):
+        from apps.auditoria.models import AuditAction, AuditLog
+        self.client.force_login(self.revisor)
+        data = {"parecer_geral": "", "acao": "aprovar", **self._scores_post()}
+        self.client.post(self.url, data)
+        self.assertTrue(
+            AuditLog.objects.filter(acao=AuditAction.INSCRICAO_REVISADA).exists()
+        )
+
+    def test_post_indeferir_sem_parecer_retorna_form_com_erro(self):
+        self.client.force_login(self.revisor)
+        data = {"parecer_geral": "", "acao": "indeferir", **self._scores_post()}
+        response = self.client.post(self.url, data)
+        self.assertEqual(response.status_code, 200)
+
+    def test_post_silencio_usa_pontuacao_candidato(self):
+        from apps.inscricoes.models import InscricaoItem
+        self.client.force_login(self.revisor)
+        # POST sem nenhum campo validado_ — silêncio = concordância
+        data = {"parecer_geral": "", "acao": "aprovar"}
+        self.client.post(self.url, data)
+        item = InscricaoItem.objects.filter(inscricao=self.inscricao).first()
+        item.refresh_from_db()
+        self.assertEqual(item.pontuacao_validada, item.pontuacao)
+
+    def test_view_comprovante_requer_staff(self):
+        url = f"/rh/inscricoes/{self.inscricao.pk}/pdf/"
+        self.client.force_login(self.candidato)
+        response = self.client.get(url)
+        self.assertNotEqual(response.status_code, 200)
