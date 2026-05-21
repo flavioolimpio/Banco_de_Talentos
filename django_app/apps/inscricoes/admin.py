@@ -59,10 +59,10 @@ def _exportar_inscricoes_csv(queryset) -> HttpResponse:
 
 @admin.register(Inscricao)
 class InscricaoAdmin(admin.ModelAdmin):
-    list_display = ("usuario", "modalidade", "tipo_servidor", "total", "status", "atualizado_em")
+    list_display = ("usuario", "modalidade", "tipo_servidor", "total", "total_validado", "status", "link_revisar", "atualizado_em")
     list_filter = ("modalidade", "tipo_servidor", "status")
     search_fields = ("usuario__cpf", "usuario__nome_completo", "usuario__email")
-    readonly_fields = ("criado_em", "atualizado_em", "enviada_em", "pdf_download_link")
+    readonly_fields = ("criado_em", "atualizado_em", "enviada_em", "pdf_download_link", "total_validado", "revisado_em", "revisado_por")
     inlines = [InscricaoItemInline]
     actions = ["aprovar_selecionadas", "reprovar_selecionadas", "marcar_em_analise", "exportar_csv"]
 
@@ -72,6 +72,13 @@ class InscricaoAdmin(admin.ModelAdmin):
         url = reverse("download_comprovante", args=[obj.pk])
         return format_html('<a href="{}" target="_blank">Baixar PDF</a>', url)
     pdf_download_link.short_description = "Comprovantes"
+
+    def link_revisar(self, obj):
+        if obj.status == StatusInscricao.EM_ANALISE:
+            url = reverse("revisao_rh", args=[obj.pk])
+            return format_html('<a href="{}">Revisar &rarr;</a>', url)
+        return "—"
+    link_revisar.short_description = "Revisão"
 
     @admin.action(description="Aprovar inscrições selecionadas")
     def aprovar_selecionadas(self, request, queryset):

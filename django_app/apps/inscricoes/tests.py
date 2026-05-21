@@ -739,3 +739,42 @@ class RevisaoViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.inscricao.refresh_from_db()
         self.assertEqual(self.inscricao.status, StatusInscricao.EM_ANALISE)
+
+
+class InscricaoAdminLinkRevisarTest(TestCase):
+    def setUp(self):
+        self.site = AdminSite()
+        self.admin_user = User.objects.create_superuser(
+            cpf="52998224725",
+            email="admin@ifg.edu.br",
+            nome_completo="Admin RH",
+            password="Admin123!",
+        )
+        self.candidato = User.objects.create_user(
+            cpf="11144477735",
+            email="cand@test.com",
+            nome_completo="Candidato",
+            vinculo="estudante",
+            password="Cand123!",
+        )
+
+    def test_link_revisar_exibido_para_em_analise(self):
+        inscricao = Inscricao.objects.create(
+            usuario=self.candidato,
+            modalidade="estudante",
+            status=StatusInscricao.EM_ANALISE,
+        )
+        ma = InscricaoAdmin(Inscricao, self.site)
+        html = ma.link_revisar(inscricao)
+        self.assertIn("Revisar", str(html))
+        self.assertIn(f"/rh/inscricoes/{inscricao.pk}/revisar/", str(html))
+
+    def test_link_revisar_vazio_para_outros_status(self):
+        inscricao = Inscricao.objects.create(
+            usuario=self.candidato,
+            modalidade="estudante",
+            status=StatusInscricao.PENDENTE,
+        )
+        ma = InscricaoAdmin(Inscricao, self.site)
+        resultado = ma.link_revisar(inscricao)
+        self.assertEqual(resultado, "—")
