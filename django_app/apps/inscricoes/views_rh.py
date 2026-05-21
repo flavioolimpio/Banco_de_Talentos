@@ -64,6 +64,18 @@ def revisao_view(request, pk):
         })
 
     acao = request.POST.get("acao", "")
+    if acao not in ("aprovar", "indeferir"):
+        messages.error(request, "Ação inválida.")
+        itens_com_score = [
+            (item, request.POST.get(f"validado_{item.pk}", ""))
+            for item in itens
+        ]
+        return render(request, "rh/revisao.html", {
+            "inscricao": inscricao,
+            "itens_com_score": itens_com_score,
+            "form": RevisaoForm(request.POST, acao=acao),
+        })
+
     form = RevisaoForm(request.POST, acao=acao)
 
     if not form.is_valid():
@@ -122,4 +134,12 @@ def view_comprovante(request, pk):
     inscricao = get_object_or_404(Inscricao, pk=pk)
     if not inscricao.comprovantes_pdf:
         raise Http404
+    AuditLog.objects.create(
+        ator=request.user,
+        alvo=inscricao.usuario,
+        acao=AuditAction.COMPROVANTE_DOWNLOAD,
+        ip=_get_client_ip(request),
+        user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        detalhes={"inscricao_id": pk},
+    )
     return FileResponse(inscricao.comprovantes_pdf.open("rb"), content_type="application/pdf")

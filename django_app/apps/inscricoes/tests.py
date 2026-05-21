@@ -730,3 +730,12 @@ class RevisaoViewTest(TestCase):
         self.client.force_login(self.candidato)
         response = self.client.get(url)
         self.assertNotEqual(response.status_code, 200)
+
+    def test_post_acao_invalida_nao_comite(self):
+        """POST com acao vazia deve retornar 200 (re-render) e NÃO alterar o status da inscrição."""
+        self.client.force_login(self.revisor)
+        data = {"parecer_geral": "", "acao": "", **self._scores_post()}
+        response = self.client.post(self.url, data)
+        self.assertEqual(response.status_code, 200)
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.status, StatusInscricao.EM_ANALISE)
