@@ -587,3 +587,26 @@ class InscricaoNovoCamposTest(TestCase):
     def test_auditaction_inscricao_revisada_existe(self):
         from apps.auditoria.models import AuditAction
         self.assertIn("inscricao_revisada", [c for c, _ in AuditAction.choices])
+
+
+class RevisaoFormTest(TestCase):
+    def test_aprovar_sem_parecer_valido(self):
+        from apps.inscricoes.forms_rh import RevisaoForm
+        form = RevisaoForm({"parecer_geral": ""}, acao="aprovar")
+        self.assertTrue(form.is_valid())
+
+    def test_indeferir_sem_parecer_invalido(self):
+        from apps.inscricoes.forms_rh import RevisaoForm
+        form = RevisaoForm({"parecer_geral": ""}, acao="indeferir")
+        self.assertFalse(form.is_valid())
+        self.assertIn("parecer_geral", form.errors)
+
+    def test_indeferir_com_parecer_valido(self):
+        from apps.inscricoes.forms_rh import RevisaoForm
+        form = RevisaoForm({"parecer_geral": "Documentação incompleta."}, acao="indeferir")
+        self.assertTrue(form.is_valid())
+
+    def test_parecer_so_espacos_invalido_ao_indeferir(self):
+        from apps.inscricoes.forms_rh import RevisaoForm
+        form = RevisaoForm({"parecer_geral": "   "}, acao="indeferir")
+        self.assertFalse(form.is_valid())
