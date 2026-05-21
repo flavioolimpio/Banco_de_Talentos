@@ -1,2 +1,475 @@
 {% extends "base_dashboard.html" %}
-{% block page_content %}stub{% endblock %}
+
+{% block title %}Revis&atilde;o RH &mdash; {{ inscricao.usuario.nome_completo }} &mdash; Banco de Talentos IFG{% endblock %}
+
+{% block page_content %}
+<style>
+/* ── layout geral ─────────────────────────────────────────── */
+.revisao-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 0px);   /* ocupa o viewport disponível */
+    overflow: hidden;
+}
+
+/* ── cabeçalho ────────────────────────────────────────────── */
+.revisao-header {
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+}
+.revisao-header a.back-link {
+    color: #168241;
+    text-decoration: none;
+    font-size: 13px;
+    white-space: nowrap;
+}
+.revisao-header a.back-link:hover { text-decoration: underline; }
+.header-nome {
+    font-weight: 700;
+    font-size: 16px;
+    color: #202124;
+}
+.header-meta {
+    font-size: 13px;
+    color: #555;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+.badge-modalidade {
+    background: #168241;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+.badge-tipo {
+    background: #e8f5e9;
+    color: #168241;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+
+/* ── painel principal: PDF | formulário ───────────────────── */
+.revisao-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* ── painel esquerdo: PDF ─────────────────────────────────── */
+.pdf-panel {
+    width: 48%;
+    flex-shrink: 0;
+    background: #f0f0f0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #d0d0d0;
+    overflow: hidden;
+}
+.pdf-panel iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+}
+.pdf-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    font-size: 14px;
+}
+
+/* ── painel direito: critérios ────────────────────────────── */
+.criterios-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.criterios-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px 0;
+}
+.criterio-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: #fff;
+}
+.criterio-titulo {
+    font-weight: 600;
+    font-size: 14px;
+    color: #202124;
+    margin-bottom: 6px;
+    text-align: justify;
+}
+.criterio-maximo {
+    font-size: 12px;
+    color: #777;
+    margin-bottom: 8px;
+}
+.criterio-campos {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+.campo-bloco {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.campo-label {
+    font-size: 11px;
+    color: #888;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.campo-candidato {
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #202124;
+    width: 90px;
+    text-align: center;
+}
+.campo-validado {
+    width: 90px;
+    padding: 6px 10px;
+    border: 1px solid #b0c4b1;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 700;
+    text-align: center;
+    color: #202124;
+    outline: none;
+    transition: border-color .15s;
+}
+.campo-validado:focus {
+    border-color: #168241;
+    box-shadow: 0 0 0 2px rgba(22,130,65,.15);
+}
+.campo-obs {
+    flex: 1;
+    min-width: 160px;
+}
+.campo-obs textarea {
+    width: 100%;
+    min-height: 38px;
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #202124;
+    resize: vertical;
+    font-family: inherit;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color .15s;
+}
+.campo-obs textarea:focus {
+    border-color: #168241;
+    box-shadow: 0 0 0 2px rgba(22,130,65,.15);
+}
+
+/* ── rodapé fixo: totais + ações ──────────────────────────── */
+.revisao-footer {
+    background: #fff;
+    border-top: 2px solid #e0e0e0;
+    padding: 14px 20px;
+    flex-shrink: 0;
+}
+.totais-row {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+.total-bloco {
+    text-align: center;
+}
+.total-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+}
+.total-valor {
+    font-size: 22px;
+    font-weight: 800;
+    color: #202124;
+}
+.total-valor span.pts {
+    font-size: 12px;
+    font-weight: 400;
+    color: #666;
+    margin-left: 2px;
+}
+.total-validado-val {
+    color: #168241;
+}
+.parecer-bloco {
+    margin-bottom: 12px;
+}
+.parecer-bloco label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #202124;
+    display: block;
+    margin-bottom: 4px;
+}
+.parecer-bloco textarea {
+    width: 100%;
+    min-height: 52px;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #202124;
+    resize: vertical;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color .15s;
+}
+.parecer-bloco textarea:focus {
+    border-color: #168241;
+    box-shadow: 0 0 0 2px rgba(22,130,65,.15);
+}
+.parecer-nota {
+    font-size: 11px;
+    color: #888;
+    margin-top: 3px;
+}
+.acoes-row {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+.btn-indeferir {
+    background: #dc3545;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background .15s;
+}
+.btn-indeferir:hover { background: #b02a37; }
+.btn-aprovar {
+    background: #168241;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background .15s;
+}
+.btn-aprovar:hover { background: #0f5c2e; }
+.errorlist {
+    color: #dc3545;
+    font-size: 12px;
+    list-style: none;
+    padding: 0;
+    margin: 3px 0 0;
+}
+</style>
+
+<div class="revisao-wrapper">
+
+    {# ── Cabeçalho ──────────────────────────────────────────── #}
+    <div class="revisao-header">
+        <a href="{% url 'admin:inscricoes_inscricao_changelist' %}" class="back-link">&larr; voltar</a>
+        <div>
+            <div class="header-nome">{{ inscricao.usuario.nome_completo }}</div>
+            <div class="header-meta">
+                <span class="badge-modalidade">{{ inscricao.get_modalidade_display }}</span>
+                {% if inscricao.tipo_servidor %}
+                    <span class="badge-tipo">{{ inscricao.get_tipo_servidor_display }}</span>
+                {% endif %}
+                <span>Enviada em {{ inscricao.enviada_em|date:"d/m/Y H:i" }}</span>
+            </div>
+        </div>
+    </div>
+
+    {# ── Corpo: PDF | Critérios ──────────────────────────────── #}
+    <form method="post" novalidate>
+        {% csrf_token %}
+
+        <div class="revisao-body">
+
+            {# ── Painel esquerdo: PDF ──────────────────────────── #}
+            <div class="pdf-panel">
+                {% if inscricao.comprovantes_pdf %}
+                    <iframe src="{% url 'view_comprovante' inscricao.pk %}"
+                            title="Comprovante PDF de {{ inscricao.usuario.nome_completo }}">
+                    </iframe>
+                {% else %}
+                    <div class="pdf-empty">Nenhum PDF enviado.</div>
+                {% endif %}
+            </div>
+
+            {# ── Painel direito: critérios + rodapé ──────────── #}
+            <div class="criterios-panel">
+
+                {# lista de critérios com scroll #}
+                <div class="criterios-scroll">
+
+                    {% for item, valor_validado in itens_com_score %}
+                    <div class="criterio-card">
+                        <div class="criterio-titulo">
+                            {{ forloop.counter }}. {{ item.criterio.criterio }}
+                        </div>
+                        <div class="criterio-maximo">
+                            M&aacute;ximo: {{ item.criterio.maximo|floatformat:"-2" }} pts
+                        </div>
+                        <div class="criterio-campos">
+
+                            {# pontuação declarada pelo candidato #}
+                            <div class="campo-bloco">
+                                <span class="campo-label">Candidato</span>
+                                <div class="campo-candidato">{{ item.pontuacao|floatformat:1 }}</div>
+                            </div>
+
+                            {# pontuação validada pelo RH #}
+                            <div class="campo-bloco">
+                                <span class="campo-label">Validado</span>
+                                <input
+                                    class="campo-validado"
+                                    id="validado_{{ item.pk }}"
+                                    name="validado_{{ item.pk }}"
+                                    type="number"
+                                    min="0"
+                                    max="{{ item.criterio.maximo }}"
+                                    step="0.1"
+                                    placeholder="{{ item.pontuacao|floatformat:1 }}"
+                                    data-candidato="{{ item.pontuacao }}"
+                                    value="{{ valor_validado }}"
+                                >
+                            </div>
+
+                            {# observação de avaliação #}
+                            <div class="campo-bloco campo-obs">
+                                <span class="campo-label">Observa&ccedil;&atilde;o</span>
+                                <textarea
+                                    name="obs_{{ item.pk }}"
+                                    placeholder="observa&ccedil;&atilde;o opcional..."
+                                >{{ item.observacao_avaliacao|default:'' }}</textarea>
+                            </div>
+
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                </div>{# /criterios-scroll #}
+
+                {# ── Rodapé fixo: totais + parecer + ações ──── #}
+                <div class="revisao-footer">
+
+                    <div class="totais-row">
+                        <div class="total-bloco">
+                            <div class="total-label">Total candidato</div>
+                            <div class="total-valor">
+                                {{ inscricao.total|floatformat:1 }}<span class="pts">pts</span>
+                            </div>
+                        </div>
+                        <div class="total-bloco">
+                            <div class="total-label">Total validado</div>
+                            <div class="total-valor total-validado-val">
+                                <span id="total-validado">{{ inscricao.total_validado|floatformat:1 }}</span><span class="pts">pts</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="parecer-bloco">
+                        <label for="{{ form.parecer_geral.id_for_label }}">
+                            Parecer geral
+                        </label>
+                        {{ form.parecer_geral }}
+                        {% if form.parecer_geral.errors %}
+                            {{ form.parecer_geral.errors }}
+                        {% endif %}
+                        <div class="parecer-nota">(obrigat&oacute;rio ao indeferir)</div>
+                    </div>
+
+                    <div class="acoes-row">
+                        <button type="submit" name="acao" value="indeferir" class="btn-indeferir">
+                            Indeferir
+                        </button>
+                        <button type="submit" name="acao" value="aprovar" class="btn-aprovar">
+                            Aprovar &#10003;
+                        </button>
+                    </div>
+
+                </div>{# /revisao-footer #}
+
+            </div>{# /criterios-panel #}
+
+        </div>{# /revisao-body #}
+
+    </form>
+
+</div>{# /revisao-wrapper #}
+
+<script>
+(function () {
+    "use strict";
+
+    var inputs = document.querySelectorAll('[id^="validado_"]');
+    var spanTotal = document.getElementById("total-validado");
+
+    function calcularTotal() {
+        var soma = 0;
+        inputs.forEach(function (inp) {
+            var raw = inp.value.trim();
+            if (raw !== "") {
+                var v = parseFloat(raw);
+                if (!isNaN(v)) { soma += v; }
+            } else {
+                // sem entrada → usa pontuação declarada pelo candidato
+                var cand = parseFloat(inp.dataset.candidato);
+                if (!isNaN(cand)) { soma += cand; }
+            }
+        });
+        if (spanTotal) {
+            spanTotal.textContent = soma.toFixed(1);
+        }
+    }
+
+    // calcular ao carregar a página
+    calcularTotal();
+
+    // recalcular a cada alteração
+    inputs.forEach(function (inp) {
+        inp.addEventListener("input", calcularTotal);
+    });
+}());
+</script>
+{% endblock %}
