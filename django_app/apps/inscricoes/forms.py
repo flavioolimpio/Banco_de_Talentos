@@ -27,6 +27,7 @@ class InscricaoForm(forms.Form):
     aceite_envio = forms.BooleanField(
         label="Confirmo que os dados informados são verdadeiros.",
         required=False,
+        widget=forms.CheckboxInput(attrs={"style": "margin:0;padding:0;flex-shrink:0;cursor:pointer;width:14px;height:14px"}),
     )
 
     def __init__(self, *args, usuario=None, acao=None, **kwargs):

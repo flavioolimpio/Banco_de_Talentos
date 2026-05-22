@@ -82,26 +82,28 @@
         </div>
         {% endfor %}
 
-        <div style="background:#f8f8f8;border-radius:8px;padding:16px;margin-top:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
-            <div>
-                <div style="font-size:13px;color:#555">Pontua&ccedil;&atilde;o total</div>
-                <div style="font-size:28px;font-weight:700;color:#202124">
-                    <span id="total-display">0,0</span>
-                    <span style="font-size:14px;font-weight:400">pts</span>
-                </div>
+        <div style="background:#f8f8f8;border-radius:8px;padding:16px;margin-top:16px">
+            <div style="margin-bottom:12px;display:flex;justify-content:flex-end">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#555;cursor:pointer;max-width:280px">
+                    {{ form.aceite_envio }}
+                    <span style="text-align:center">{{ form.aceite_envio.label }}</span>
+                </label>
+                {{ form.aceite_envio.errors }}
             </div>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-                <button type="submit" name="action" value="rascunho" class="secondary-button">
-                    Salvar rascunho
-                </button>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
                 <div>
-                    <label style="display:flex;align-items:flex-start;gap:6px;font-size:13px;color:#555;margin-bottom:6px;max-width:240px">
-                        {{ form.aceite_envio }}
-                        <span>{{ form.aceite_envio.label }}</span>
-                    </label>
-                    {{ form.aceite_envio.errors }}
+                    <div style="font-size:13px;color:#555">Pontua&ccedil;&atilde;o total</div>
+                    <div style="font-size:28px;font-weight:700;color:#202124">
+                        <span id="total-display">0,0</span>
+                        <span style="font-size:14px;font-weight:400">pts</span>
+                    </div>
+                </div>
+                <div style="display:flex;gap:10px;align-items:center">
+                    <button type="submit" name="action" value="rascunho" class="primary-button">
+                        Salvar
+                    </button>
                     <button type="submit" name="action" value="enviar" class="primary-button">
-                        Enviar inscri&ccedil;&atilde;o &#10003;
+                        Enviar
                     </button>
                 </div>
             </div>
