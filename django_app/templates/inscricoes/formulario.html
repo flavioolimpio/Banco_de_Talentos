@@ -1,5 +1,5 @@
 {% extends "base_dashboard.html" %}
-{% load static %}
+{% load static l10n %}
 
 {% block title %}Minha Inscri&ccedil;&atilde;o - Banco de Talentos IFG{% endblock %}
 
@@ -71,11 +71,11 @@
                     type="number"
                     name="score_{{ criterio.pk }}"
                     data-score
-                    data-max="{{ criterio.maximo }}"
+                    data-max="{% localize off %}{{ criterio.maximo|floatformat:2 }}{% endlocalize %}"
                     min="0"
-                    max="{{ criterio.maximo }}"
+                    max="{% localize off %}{{ criterio.maximo|floatformat:2 }}{% endlocalize %}"
                     step="0.1"
-                    value="{{ score|floatformat:1 }}"
+                    value="{% localize off %}{{ score|floatformat:1 }}{% endlocalize %}"
                     style="width:76px;padding:6px;border:1px solid #ccc;border-radius:6px;text-align:center;font-size:16px;font-weight:600"
                 >
             </div>
