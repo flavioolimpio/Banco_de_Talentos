@@ -15,7 +15,7 @@ from django.views.decorators.http import require_http_methods
 
 from apps.auditoria.models import AuditAction, AuditLog
 from apps.inscricoes.forms import InscricaoForm
-from apps.inscricoes.models import CriterioEdital, Inscricao, InscricaoItem, StatusInscricao
+from apps.inscricoes.models import CriterioEdital, Inscricao, InscricaoItem, StatusInscricao, TipoServidor
 from apps.usuarios.models import Vinculo
 
 
@@ -27,9 +27,12 @@ def _get_client_ip(request):
 
 
 def _get_criterios(usuario, tipo_servidor=""):
+    # Critérios de pesquisador ficam com tipo_servidor="" (quadro compartilhado de servidor).
+    # Apenas apoio_tecnico tem quadro próprio.
+    ts = tipo_servidor if tipo_servidor == TipoServidor.APOIO_TECNICO else ""
     return CriterioEdital.objects.filter(
         modalidade=usuario.vinculo,
-        tipo_servidor=tipo_servidor,
+        tipo_servidor=ts,
         ativo=True,
     ).order_by("ordem")
 
