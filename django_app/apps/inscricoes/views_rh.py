@@ -4,12 +4,14 @@
 
 from decimal import Decimal, InvalidOperation
 
+from csp.decorators import csp_replace
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import transaction
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from apps.auditoria.models import AuditAction, AuditLog
 from apps.inscricoes.forms_rh import RevisaoForm
@@ -130,6 +132,8 @@ def revisao_view(request, pk):
 
 
 @staff_member_required
+@xframe_options_sameorigin
+@csp_replace(FRAME_ANCESTORS=("'self'",))
 def view_comprovante(request, pk):
     inscricao = get_object_or_404(Inscricao, pk=pk)
     if not inscricao.comprovantes_pdf:
