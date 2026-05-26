@@ -4,16 +4,153 @@
 {% block title %}Início - Banco de Especialistas IFG{% endblock %}
 
 {% block page_content %}
-<div style="padding:32px 32px 0">
-    <h2 style="margin:0 0 4px;color:#202124">
-        Olá, {{ request.user.nome_completo|truncatewords:1|cut:" …" }}!
-    </h2>
-    <p style="color:#666;margin:0 0 20px;font-size:14px">
-        Modalidade: <strong>{{ request.user.get_vinculo_display }}</strong>
-    </p>
+<style>
+.home-hero {
+    display: flex;
+    gap: 32px;
+    align-items: center;
+    padding: 32px 32px 24px;
+}
+.home-hero-text { flex: 1; min-width: 0; }
+.home-hero-img {
+    flex-shrink: 0;
+    width: 260px;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.home-hero-img img { width: 100%; display: block; }
+.home-badge {
+    display: inline-block;
+    background: #d6f000;
+    color: #168241;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 14px;
+    letter-spacing: .3px;
+}
+.home-title {
+    font-size: 28px;
+    font-weight: 800;
+    color: #202124;
+    margin: 0 0 4px;
+    line-height: 1.2;
+}
+.home-subtitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: #168241;
+    margin: 0 0 2px;
+}
+.home-inst {
+    font-size: 13px;
+    color: #6b7280;
+    margin: 0 0 14px;
+}
+.home-desc {
+    font-size: 14px;
+    color: #444;
+    line-height: 1.6;
+    margin: 0 0 20px;
+    max-width: 560px;
+}
+.home-cta {
+    display: inline-block;
+    background: #168241;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 22px;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background .15s;
+}
+.home-cta:hover { background: #126834; }
+.home-cta.secondary {
+    background: #f0f0f0;
+    color: #202124;
+}
+.home-cta.secondary:hover { background: #e0e0e0; }
+.home-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    padding: 0 32px 32px;
+}
+.home-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-top: 4px solid #168241;
+    border-radius: 8px;
+    padding: 18px 20px;
+}
+.home-card-icon {
+    font-size: 28px;
+    margin-bottom: 10px;
+}
+.home-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #202124;
+    margin: 0 0 6px;
+}
+.home-card-desc {
+    font-size: 13px;
+    color: #6b7280;
+    margin: 0;
+    line-height: 1.5;
+}
+@media (max-width: 640px) {
+    .home-hero { flex-direction: column; padding: 20px 16px 16px; }
+    .home-hero-img { width: 100%; }
+    .home-cards { padding: 0 16px 24px; }
+}
+</style>
+
+<div class="home-hero">
+    <div class="home-hero-text">
+        <span class="home-badge">&#9889; Tecnologias Energ&eacute;ticas Industriais</span>
+        <h1 class="home-title">Banco de Especialistas</h1>
+        <p class="home-subtitle">PD&amp;I e Extens&atilde;o Tecnol&oacute;gica</p>
+        <p class="home-inst">Polo de Inova&ccedil;&atilde;o do IFG</p>
+        <p class="home-desc">
+            Gera&ccedil;&atilde;o de energia, efici&ecirc;ncia energ&eacute;tica, fontes renov&aacute;veis
+            e intelig&ecirc;ncia artificial aplicada ao setor energ&eacute;tico.
+        </p>
+
+        {% if inscricao and inscricao.enviada_em %}
+            <a href="{% url 'inscricao_confirmacao' %}" class="home-cta secondary">Ver minha inscri&ccedil;&atilde;o</a>
+        {% else %}
+            <a href="{% url 'inscricao' %}" class="home-cta">Fazer inscri&ccedil;&atilde;o</a>
+        {% endif %}
+    </div>
+
+    <div class="home-hero-img">
+        <img src="{% static 'imagens/home.png' %}" alt="Banco de Especialistas IFG">
+    </div>
 </div>
 
-<img src="{% static 'imagens/home.png' %}"
-     alt="Banco de Especialistas IFG"
-     style="width:100%;display:block">
+<div class="home-cards">
+    <div class="home-card">
+        <div class="home-card-icon">&#9728;</div>
+        <p class="home-card-title">Fontes Renov&aacute;veis</p>
+        <p class="home-card-desc">Energia limpa e sustent&aacute;vel</p>
+    </div>
+    <div class="home-card">
+        <div class="home-card-icon">&#128161;</div>
+        <p class="home-card-title">Efici&ecirc;ncia Energ&eacute;tica</p>
+        <p class="home-card-desc">Otimiza&ccedil;&atilde;o e uso consciente</p>
+    </div>
+    <div class="home-card">
+        <div class="home-card-icon">&#9851;</div>
+        <p class="home-card-title">Reaproveitamento de Mat&eacute;ria-Prima</p>
+        <p class="home-card-desc">Economia circular e inova&ccedil;&atilde;o</p>
+    </div>
+    <div class="home-card">
+        <div class="home-card-icon">&#129504;</div>
+        <p class="home-card-title">Intelig&ecirc;ncia Artificial</p>
+        <p class="home-card-desc">Solu&ccedil;&otilde;es inteligentes para o setor energ&eacute;tico</p>
+    </div>
+</div>
 {% endblock %}
