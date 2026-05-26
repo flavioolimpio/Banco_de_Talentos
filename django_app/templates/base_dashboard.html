@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Banco de Talentos IFG{% endblock %}</title>
+    <title>{% block title %}Banco de Especialistas IFG{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'css/app.css' %}">
     <style>
     .dashboard-layout{display:flex;min-height:100vh}
@@ -32,7 +32,7 @@
     <div class="dashboard-layout">
         {% if request.user.is_authenticated %}<aside class="sidebar">
             <div class="sidebar-brand">
-                <div class="sidebar-title">Banco de Talentos</div>
+                <div class="sidebar-title">Banco de Especialistas</div>
                 <div class="sidebar-subtitle">Polo de Inovação IFG</div>
                 <div class="sidebar-user">{{ request.user.nome_completo }}</div>
             </div>

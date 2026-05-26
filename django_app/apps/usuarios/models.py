@@ -6,12 +6,12 @@ from django.utils import timezone
 
 class Vinculo(models.TextChoices):
     ESTUDANTE = "estudante", "Estudante"
-    SERVIDOR = "servidor", "Servidor"
-    COLABORADOR_EXTERNO = "colaborador_externo", "Colaborador Externo"
+    SERVIDOR = "servidor", "Servidor(a)"
+    COLABORADOR_EXTERNO = "colaborador_externo", "Colaborador(a) Externo(a)"
 
 
 class Perfil(models.TextChoices):
-    CANDIDATO = "candidato", "Candidato"
+    CANDIDATO = "candidato", "Candidato(a)"
     RH = "rh", "RH"
     COORDENADOR = "coordenador", "Coordenador"
     ADMIN = "admin", "Administrador"

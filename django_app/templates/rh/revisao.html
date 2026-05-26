@@ -1,6 +1,6 @@
 {% extends "base_dashboard.html" %}
 
-{% block title %}Revis&atilde;o RH &mdash; {{ inscricao.usuario.nome_completo }} &mdash; Banco de Talentos IFG{% endblock %}
+{% block title %}Revis&atilde;o RH &mdash; {{ inscricao.usuario.nome_completo }} &mdash; Banco de Especialistas IFG{% endblock %}
 
 {% block page_content %}
 <style>
@@ -354,7 +354,7 @@
 
                             {# pontuação declarada pelo candidato #}
                             <div class="campo-bloco">
-                                <span class="campo-label">Candidato</span>
+                                <span class="campo-label">Candidato(a)</span>
                                 <div class="campo-candidato">{{ item.pontuacao|floatformat:1 }}</div>
                             </div>
 

@@ -57,7 +57,7 @@ class CadastroUsuarioForm(forms.ModelForm):
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
     )
     aceite_lgpd = forms.BooleanField(
-        label="Declaro que li e concordo com o uso dos meus dados para fins de cadastro, seleção e comunicação do Banco de Talentos do Polo de Inovação do IFG."
+        label="Declaro que li e concordo com o uso dos meus dados para fins de cadastro, seleção e comunicação do Banco de Especialistas do Polo de Inovação do IFG."
     )
 
     class Meta:

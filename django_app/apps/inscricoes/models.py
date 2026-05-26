@@ -9,7 +9,7 @@ from apps.usuarios.models import Vinculo
 
 
 class TipoServidor(models.TextChoices):
-    PESQUISADOR = "pesquisador", "Pesquisador"
+    PESQUISADOR = "pesquisador", "Pesquisador(a)"
     APOIO_TECNICO = "apoio_tecnico", "Apoio técnico"
 
 
