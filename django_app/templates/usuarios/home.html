@@ -6,19 +6,16 @@
 {% block page_content %}
 <style>
 .home-hero {
-    display: flex;
-    gap: 32px;
-    align-items: center;
     padding: 32px 32px 24px;
 }
-.home-hero-text { flex: 1; min-width: 0; }
-.home-hero-img {
-    flex-shrink: 0;
-    width: 260px;
+.home-hero-text { min-width: 0; }
+.home-banner {
+    width: 100%;
+    margin: 0 0 24px;
     border-radius: 10px;
     overflow: hidden;
 }
-.home-hero-img img { width: 100%; display: block; }
+.home-banner img { width: 100%; display: block; max-height: 420px; object-fit: cover; }
 .home-badge {
     display: inline-block;
     background: #d6f000;
@@ -102,8 +99,7 @@
     line-height: 1.5;
 }
 @media (max-width: 640px) {
-    .home-hero { flex-direction: column; padding: 20px 16px 16px; }
-    .home-hero-img { width: 100%; }
+    .home-hero { padding: 20px 16px 16px; }
     .home-cards { padding: 0 16px 24px; }
 }
 </style>
@@ -125,10 +121,10 @@
             <a href="{% url 'inscricao' %}" class="home-cta">Fazer inscri&ccedil;&atilde;o</a>
         {% endif %}
     </div>
+</div>
 
-    <div class="home-hero-img">
-        <img src="{% static 'imagens/home.png' %}" alt="Banco de Especialistas IFG">
-    </div>
+<div class="home-banner">
+    <img src="{% static 'imagens/home.png' %}" alt="Banco de Especialistas IFG">
 </div>
 
 <div class="home-cards">
