@@ -59,27 +59,30 @@ def _parse_scores(post_data, criterios):
 def _resolve_api_scores(usuario, criterios, inscricao):
     """
     Busca pontuação dos critérios API (IFGProduz) para o usuário.
-    Retorna dict {criterio_pk: Decimal} com os valores resolvidos.
+    Retorna (dict {criterio_pk: Decimal}, api_falhou: bool).
+    api_falhou=True indica que o Lattes está preenchido mas a API não respondeu.
     """
     api_criterios = [c for c in criterios if c.is_api]
     if not api_criterios:
-        return {}
+        return {}, False
 
     valor_api = buscar_pontuacao_ifgproduz(usuario.lattes)
+    api_falhou = usuario.lattes and valor_api is None
 
     scores = {}
     for criterio in api_criterios:
         if valor_api is not None:
             scores[criterio.pk] = min(Decimal(str(valor_api)), criterio.maximo)
-        elif inscricao:
+        elif inscricao and inscricao.pk:
+            # só acessa o banco se a inscrição já foi salva (tem pk)
             item = inscricao.itens.filter(criterio=criterio).first()
             scores[criterio.pk] = item.pontuacao if item else Decimal("0")
         else:
             scores[criterio.pk] = Decimal("0")
-    return scores
+    return scores, bool(api_falhou)
 
 
-def _render_form(request, form, criterios, inscricao, scores=None, lattes_ausente=False):
+def _render_form(request, form, criterios, inscricao, scores=None, lattes_ausente=False, api_falhou=False):
     itens = scores or {}
     criterios_com_score = [
         (c, itens.get(c.pk, Decimal("0")))
@@ -91,6 +94,7 @@ def _render_form(request, form, criterios, inscricao, scores=None, lattes_ausent
         "inscricao": inscricao,
         "is_servidor": request.user.vinculo == Vinculo.SERVIDOR,
         "lattes_ausente": lattes_ausente,
+        "api_falhou": api_falhou,
     })
 
 
@@ -114,13 +118,13 @@ def inscricao_view(request):
             for item in inscricao.itens.select_related("criterio"):
                 itens_existentes[item.criterio_id] = item.pontuacao
 
-        api_scores = _resolve_api_scores(usuario, criterios, inscricao)
+        api_scores, api_falhou = _resolve_api_scores(usuario, criterios, inscricao)
         itens_existentes.update(api_scores)
 
         lattes_ausente = usuario.vinculo == Vinculo.SERVIDOR and not usuario.lattes
         return _render_form(
             request, InscricaoForm(usuario=usuario), criterios, inscricao,
-            itens_existentes, lattes_ausente=lattes_ausente,
+            itens_existentes, lattes_ausente=lattes_ausente, api_falhou=api_falhou,
         )
 
     # POST
@@ -131,10 +135,10 @@ def inscricao_view(request):
 
     if not form.is_valid():
         scores, _ = _parse_scores(request.POST, criterios)
-        api_scores = _resolve_api_scores(usuario, criterios, inscricao)
+        api_scores, api_falhou = _resolve_api_scores(usuario, criterios, inscricao)
         scores.update(api_scores)
         lattes_ausente = usuario.vinculo == Vinculo.SERVIDOR and not usuario.lattes
-        return _render_form(request, form, criterios, inscricao, scores, lattes_ausente=lattes_ausente)
+        return _render_form(request, form, criterios, inscricao, scores, lattes_ausente=lattes_ausente, api_falhou=api_falhou)
 
     with transaction.atomic():
         if inscricao is None:
@@ -151,7 +155,7 @@ def inscricao_view(request):
             inscricao.comprovantes_pdf_mime = getattr(pdf, "content_type", "application/pdf")
 
         scores, total = _parse_scores(request.POST, criterios)
-        api_scores = _resolve_api_scores(usuario, criterios, inscricao)
+        api_scores, _ = _resolve_api_scores(usuario, criterios, inscricao)
         scores.update(api_scores)
         total += sum(api_scores.values())
         inscricao.total = total
