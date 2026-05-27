@@ -62,11 +62,15 @@ class CadastroUsuarioForm(forms.ModelForm):
 
     class Meta:
         model = Usuario
-        fields = ["vinculo", "nome_completo", "email", "cpf", "telefone", "senha", "confirmar_senha", "aceite_lgpd"]
+        fields = ["vinculo", "nome_completo", "email", "cpf", "telefone", "lattes", "senha", "confirmar_senha", "aceite_lgpd"]
         widgets = {
             "cpf": forms.TextInput(attrs={"inputmode": "numeric", "autocomplete": "off"}),
             "email": forms.EmailInput(attrs={"autocomplete": "email"}),
             "telefone": forms.TextInput(attrs={"autocomplete": "tel"}),
+            "lattes": forms.URLInput(attrs={"placeholder": "http://lattes.cnpq.br/0000000000000000"}),
+        }
+        help_texts = {
+            "lattes": "Necessário para cálculo automático de pontuação via IFGProduz (servidores). Pode ser preenchido depois em Meu Cadastro.",
         }
 
     def clean_cpf(self):
