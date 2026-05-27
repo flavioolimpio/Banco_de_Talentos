@@ -21,6 +21,15 @@
         Anexe um &uacute;nico PDF com todos os documentos na ordem do quadro.
     </div>
 
+    {% if lattes_ausente %}
+    <div style="background:#fff3cd;border-left:4px solid #f0ad4e;padding:10px 14px;font-size:13px;color:#555;margin:12px 0;border-radius:0 6px 6px 0">
+        <strong>&#9888; URL do Lattes n&atilde;o preenchido.</strong>
+        A pontua&ccedil;&atilde;o de Produ&ccedil;&atilde;o Acad&ecirc;mica (IFGProduz) ser&aacute; zero at&eacute; voc&ecirc;
+        preencher o campo <strong>Curr&iacute;culo Lattes</strong> em
+        <a href="{% url 'meu_cadastro' %}?aba=formacao" style="color:#168241;font-weight:600">Meu Cadastro &rarr; Forma&ccedil;&atilde;o</a>.
+    </div>
+    {% endif %}
+
     <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         {{ form.non_field_errors }}
@@ -53,10 +62,13 @@
         <h3 style="margin:0 0 12px;font-size:16px;color:#202124">Crit&eacute;rios de pontua&ccedil;&atilde;o</h3>
 
         {% for criterio, score in criterios_com_score %}
-        <div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start">
+        <div style="border:1px solid {% if criterio.is_api %}#168241{% else %}#e0e0e0{% endif %};border-radius:8px;padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start{% if criterio.is_api %};background:#f0faf4{% endif %}">
             <div style="flex:1">
                 <div style="font-weight:600;font-size:14px;color:#202124;text-align:justify">
                     {{ forloop.counter }}. {{ criterio.criterio }}
+                    {% if criterio.is_api %}
+                    <span style="font-size:11px;font-weight:400;background:#168241;color:#fff;padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">IFGProduz</span>
+                    {% endif %}
                 </div>
                 <div style="font-size:12px;color:#777;margin-top:4px;text-align:justify">
                     <strong>Regra:</strong> {{ criterio.regra }}
@@ -67,6 +79,13 @@
             </div>
             <div style="text-align:center;flex-shrink:0">
                 <div style="font-size:11px;color:#888;margin-bottom:4px">Pontua&ccedil;&atilde;o</div>
+                {% if criterio.is_api %}
+                <input type="hidden" name="score_{{ criterio.pk }}" value="{{ score|stringformat:'.1f' }}">
+                <div data-score data-max="{{ criterio.maximo|stringformat:'.2f' }}" data-value="{{ score|stringformat:'.2f' }}"
+                     style="width:76px;padding:6px;border:2px solid #168241;border-radius:6px;text-align:center;font-size:16px;font-weight:600;background:#fff;color:#168241;box-sizing:border-box">
+                    {{ score|floatformat:"1" }}
+                </div>
+                {% else %}
                 <input
                     type="number"
                     name="score_{{ criterio.pk }}"
@@ -78,6 +97,7 @@
                     value="{{ score|stringformat:'.1f' }}"
                     style="width:76px;padding:6px;border:1px solid #ccc;border-radius:6px;text-align:center;font-size:16px;font-weight:600"
                 >
+                {% endif %}
             </div>
         </div>
         {% endfor %}

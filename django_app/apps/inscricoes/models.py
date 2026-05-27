@@ -41,6 +41,7 @@ class CriterioEdital(models.Model):
     criterio = models.CharField("critério", max_length=500)
     regra = models.CharField("regra de pontuação", max_length=500)
     maximo = models.DecimalField("pontuação máxima", max_digits=8, decimal_places=2)
+    is_api = models.BooleanField("preenchido via API", default=False)
     ativo = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)

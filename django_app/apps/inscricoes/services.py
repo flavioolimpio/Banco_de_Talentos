@@ -1,0 +1,36 @@
+# apps/inscricoes/services.py
+# Banco de Talentos — Polo de Inovação IFG
+# Integração com a API IFGProduz para buscar pontuação de produção acadêmica.
+
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
+
+
+def buscar_pontuacao_ifgproduz(lattes_url: str) -> float | None:
+    """
+    Busca a pontuação de produção acadêmica do servidor no IFGProduz.
+
+    Usa o campo dados_pdf.total da API, que contém a soma ponderada
+    da produção acadêmica extraída automaticamente do Lattes.
+
+    Retorna o valor float ou None se o Lattes não foi informado,
+    o ID não existe na base ou a API estiver indisponível.
+    """
+    if not lattes_url or not lattes_url.strip():
+        return None
+
+    params = urllib.parse.urlencode({
+        "infor_docentes": "informacoes_docentesProducao",
+        "lattes_id": lattes_url.strip(),
+    })
+    url = f"https://api.lattes.bcc.ifg.edu.br/api/informacoes_docentes?{params}"
+
+    try:
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+            return float(data["dados_pdf"]["total"])
+    except Exception:
+        return None

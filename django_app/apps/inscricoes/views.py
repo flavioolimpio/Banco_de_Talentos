@@ -16,6 +16,7 @@ from django.views.decorators.http import require_http_methods
 from apps.auditoria.models import AuditAction, AuditLog
 from apps.inscricoes.forms import InscricaoForm
 from apps.inscricoes.models import CriterioEdital, Inscricao, InscricaoItem, StatusInscricao, TipoServidor
+from apps.inscricoes.services import buscar_pontuacao_ifgproduz
 from apps.usuarios.models import Vinculo
 
 
@@ -38,9 +39,12 @@ def _get_criterios(usuario, tipo_servidor=""):
 
 
 def _parse_scores(post_data, criterios):
+    """Processa apenas critérios manuais (is_api=False) a partir do POST."""
     scores = {}
     total = Decimal("0.00")
     for criterio in criterios:
+        if criterio.is_api:
+            continue
         raw = post_data.get(f"score_{criterio.pk}") or "0"
         try:
             valor = Decimal(raw.replace(",", "."))
@@ -52,7 +56,30 @@ def _parse_scores(post_data, criterios):
     return scores, total
 
 
-def _render_form(request, form, criterios, inscricao, scores=None):
+def _resolve_api_scores(usuario, criterios, inscricao):
+    """
+    Busca pontuação dos critérios API (IFGProduz) para o usuário.
+    Retorna dict {criterio_pk: Decimal} com os valores resolvidos.
+    """
+    api_criterios = [c for c in criterios if c.is_api]
+    if not api_criterios:
+        return {}
+
+    valor_api = buscar_pontuacao_ifgproduz(usuario.lattes)
+
+    scores = {}
+    for criterio in api_criterios:
+        if valor_api is not None:
+            scores[criterio.pk] = min(Decimal(str(valor_api)), criterio.maximo)
+        elif inscricao:
+            item = inscricao.itens.filter(criterio=criterio).first()
+            scores[criterio.pk] = item.pontuacao if item else Decimal("0")
+        else:
+            scores[criterio.pk] = Decimal("0")
+    return scores
+
+
+def _render_form(request, form, criterios, inscricao, scores=None, lattes_ausente=False):
     itens = scores or {}
     criterios_com_score = [
         (c, itens.get(c.pk, Decimal("0")))
@@ -63,6 +90,7 @@ def _render_form(request, form, criterios, inscricao, scores=None):
         "criterios_com_score": criterios_com_score,
         "inscricao": inscricao,
         "is_servidor": request.user.vinculo == Vinculo.SERVIDOR,
+        "lattes_ausente": lattes_ausente,
     })
 
 
@@ -85,7 +113,15 @@ def inscricao_view(request):
         if inscricao:
             for item in inscricao.itens.select_related("criterio"):
                 itens_existentes[item.criterio_id] = item.pontuacao
-        return _render_form(request, InscricaoForm(usuario=usuario), criterios, inscricao, itens_existentes)
+
+        api_scores = _resolve_api_scores(usuario, criterios, inscricao)
+        itens_existentes.update(api_scores)
+
+        lattes_ausente = usuario.vinculo == Vinculo.SERVIDOR and not usuario.lattes
+        return _render_form(
+            request, InscricaoForm(usuario=usuario), criterios, inscricao,
+            itens_existentes, lattes_ausente=lattes_ausente,
+        )
 
     # POST
     action = request.POST.get("action", "rascunho")
@@ -95,7 +131,10 @@ def inscricao_view(request):
 
     if not form.is_valid():
         scores, _ = _parse_scores(request.POST, criterios)
-        return _render_form(request, form, criterios, inscricao, scores)
+        api_scores = _resolve_api_scores(usuario, criterios, inscricao)
+        scores.update(api_scores)
+        lattes_ausente = usuario.vinculo == Vinculo.SERVIDOR and not usuario.lattes
+        return _render_form(request, form, criterios, inscricao, scores, lattes_ausente=lattes_ausente)
 
     with transaction.atomic():
         if inscricao is None:
@@ -112,6 +151,9 @@ def inscricao_view(request):
             inscricao.comprovantes_pdf_mime = getattr(pdf, "content_type", "application/pdf")
 
         scores, total = _parse_scores(request.POST, criterios)
+        api_scores = _resolve_api_scores(usuario, criterios, inscricao)
+        scores.update(api_scores)
+        total += sum(api_scores.values())
         inscricao.total = total
 
         if action == "enviar":

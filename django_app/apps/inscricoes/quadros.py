@@ -5,10 +5,11 @@
 QUADROS_INSCRICAO: dict[str, list[dict]] = {
     "servidor": [
         {
-            "id": "titulacao",
-            "criterio": "Titulação",
-            "regra": "Pontuação conforme maior titulação comprovada.",
+            "id": "ifgproduz",
+            "criterio": "Produção Acadêmica (IFGProduz)",
+            "regra": "Pontuação calculada automaticamente a partir do Lattes via IFGProduz.",
             "maximo": 100.0,
+            "is_api": True,
         },
         {
             "id": "pos_doutoramento",
@@ -45,42 +46,6 @@ QUADROS_INSCRICAO: dict[str, list[dict]] = {
             "criterio": "Projetos de PD&I fora do Polo",
             "regra": "0,7 ponto por projeto por mês.",
             "maximo": 200.0,
-        },
-        {
-            "id": "coordenacao_fomento_publico",
-            "criterio": "Coordenação de projetos com fomento público",
-            "regra": "0,8 ponto por projeto por semestre.",
-            "maximo": 200.0,
-        },
-        {
-            "id": "participacao_orientacao_projetos",
-            "criterio": "Participação/orientação em projetos",
-            "regra": "0,3 ponto por projeto por semestre.",
-            "maximo": 120.0,
-        },
-        {
-            "id": "patente_depositada",
-            "criterio": "Patente depositada",
-            "regra": "2 pts por item.",
-            "maximo": 20.0,
-        },
-        {
-            "id": "registro_software",
-            "criterio": "Registro de software",
-            "regra": "1 pt por item.",
-            "maximo": 10.0,
-        },
-        {
-            "id": "artigos_cientificos",
-            "criterio": "Artigos científicos",
-            "regra": "1 pt por artigo.",
-            "maximo": 10.0,
-        },
-        {
-            "id": "capacitacoes_polo",
-            "criterio": "Capacitações no Polo",
-            "regra": "0,3 pt por participação.",
-            "maximo": 9.0,
         },
     ],
     "estudante": [
