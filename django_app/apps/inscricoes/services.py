@@ -3,9 +3,12 @@
 # Integração com a API IFGProduz para buscar pontuação de produção acadêmica.
 
 import json
+import logging
 import urllib.error
 import urllib.parse
 import urllib.request
+
+logger = logging.getLogger(__name__)
 
 
 def buscar_pontuacao_ifgproduz(lattes_url: str) -> float | None:
@@ -21,16 +24,18 @@ def buscar_pontuacao_ifgproduz(lattes_url: str) -> float | None:
     if not lattes_url or not lattes_url.strip():
         return None
 
-    params = urllib.parse.urlencode({
-        "infor_docentes": "informacoes_docentesProducao",
-        "lattes_id": lattes_url.strip(),
-    })
-    url = f"https://api.lattes.bcc.ifg.edu.br/api/informacoes_docentes?{params}"
+    # safe=":/" mantém o http:// do URL do Lattes sem percentencoding
+    lattes_id = urllib.parse.quote(lattes_url.strip(), safe=":/")
+    url = (
+        "https://api.lattes.bcc.ifg.edu.br/api/informacoes_docentes"
+        f"?infor_docentes=informacoes_docentesProducao&lattes_id={lattes_id}"
+    )
 
     try:
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             data = json.loads(response.read().decode())
             return float(data["dados_pdf"]["total"])
-    except Exception:
+    except Exception as e:
+        logger.error("IFGProduz falhou para %s: %s", lattes_url, e)
         return None

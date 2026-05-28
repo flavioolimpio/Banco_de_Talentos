@@ -84,10 +84,15 @@ def _resolve_api_scores(usuario, criterios, inscricao):
 
 def _render_form(request, form, criterios, inscricao, scores=None, lattes_ausente=False, api_falhou=False):
     itens = scores or {}
-    criterios_com_score = [
-        (c, itens.get(c.pk, Decimal("0")))
-        for c in criterios
-    ]
+    num_manual = 0
+    criterios_com_score = []
+    for c in criterios:
+        score = itens.get(c.pk, Decimal("0"))
+        if c.is_api:
+            criterios_com_score.append((c, score, None))
+        else:
+            num_manual += 1
+            criterios_com_score.append((c, score, num_manual))
     return render(request, "inscricoes/formulario.html", {
         "form": form,
         "criterios_com_score": criterios_com_score,
@@ -172,7 +177,7 @@ def inscricao_view(request):
             InscricaoItem.objects.update_or_create(
                 inscricao=inscricao,
                 criterio=criterio,
-                defaults={"pontuacao": scores[criterio.pk]},
+                defaults={"pontuacao": scores.get(criterio.pk, Decimal("0"))},
             )
 
         AuditLog.objects.create(
