@@ -35,7 +35,17 @@ def buscar_pontuacao_ifgproduz(lattes_url: str) -> float | None:
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=10) as response:
             data = json.loads(response.read().decode())
-            return float(data["dados_pdf"]["total"])
+
+        # A API retorna cada item com {"quantidade": N, "peso": P}.
+        # Alguns campos (ex: a_titulacao) são números diretos.
+        # O total é calculado somando quantidade*peso para todos os itens.
+        total = 0.0
+        for valor in data["dados_pdf"].values():
+            if isinstance(valor, (int, float)):
+                total += valor
+            elif isinstance(valor, dict) and "quantidade" in valor and "peso" in valor:
+                total += valor["quantidade"] * valor["peso"]
+        return total
     except Exception as e:
         logger.error("IFGProduz falhou para %s: %s", lattes_url, e)
         return None
