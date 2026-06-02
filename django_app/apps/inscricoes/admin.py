@@ -63,14 +63,21 @@ class InscricaoAdmin(admin.ModelAdmin):
     list_filter = ("modalidade", "tipo_servidor", "status")
     search_fields = ("usuario__cpf", "usuario__nome_completo", "usuario__email")
     readonly_fields = ("criado_em", "atualizado_em", "enviada_em", "pdf_download_link", "total_validado", "revisado_em", "revisado_por")
+    exclude = ("comprovantes_pdf", "comprovantes_pdf_nome_original", "comprovantes_pdf_tamanho", "comprovantes_pdf_mime")
     inlines = [InscricaoItemInline]
     actions = ["aprovar_selecionadas", "reprovar_selecionadas", "marcar_em_analise", "exportar_csv"]
 
     def pdf_download_link(self, obj):
         if not obj.comprovantes_pdf:
             return "—"
-        url = reverse("download_comprovante", args=[obj.pk])
-        return format_html('<a href="{}" target="_blank">Baixar PDF</a>', url)
+        download_url = reverse("download_comprovante", args=[obj.pk])
+        view_url = reverse("view_comprovante", args=[obj.pk])
+        return format_html(
+            '<a href="{}" target="_blank">&#11015; Baixar</a>'
+            ' &nbsp;|&nbsp; '
+            '<a href="{}" target="_blank">&#128065; Visualizar</a>',
+            download_url, view_url,
+        )
     pdf_download_link.short_description = "Comprovantes"
 
     def link_revisar(self, obj):
