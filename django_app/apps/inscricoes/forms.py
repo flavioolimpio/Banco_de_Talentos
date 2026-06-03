@@ -15,7 +15,7 @@ MAX_PDF_SIZE = 10 * 1024 * 1024  # 10 MB
 
 class InscricaoForm(forms.Form):
     tipo_servidor = forms.ChoiceField(
-        label="Categoria do servidor",
+        label="Categoria",
         choices=[("", "Selecione...")] + list(TipoServidor.choices),
         required=False,
     )
@@ -52,9 +52,9 @@ class InscricaoForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
-        if self.usuario and self.usuario.vinculo == Vinculo.SERVIDOR:
-            if not cleaned_data.get("tipo_servidor"):
-                self.add_error("tipo_servidor", "Selecione a categoria do servidor.")
+        needs_subtipo = self.usuario and self.usuario.vinculo in (Vinculo.SERVIDOR, Vinculo.COLABORADOR_EXTERNO)
+        if needs_subtipo and not cleaned_data.get("tipo_servidor"):
+            self.add_error("tipo_servidor", "Selecione a categoria.")
         if self.acao == "enviar" and not cleaned_data.get("aceite_envio"):
             self.add_error(
                 "aceite_envio",

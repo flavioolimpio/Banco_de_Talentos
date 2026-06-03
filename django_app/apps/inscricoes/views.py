@@ -93,11 +93,13 @@ def _render_form(request, form, criterios, inscricao, scores=None, lattes_ausent
         else:
             num_manual += 1
             criterios_com_score.append((c, score, num_manual))
+    vinculo = request.user.vinculo
     return render(request, "inscricoes/formulario.html", {
         "form": form,
         "criterios_com_score": criterios_com_score,
         "inscricao": inscricao,
-        "is_servidor": request.user.vinculo == Vinculo.SERVIDOR,
+        "is_servidor": vinculo == Vinculo.SERVIDOR,
+        "needs_subtipo": vinculo in (Vinculo.SERVIDOR, Vinculo.COLABORADOR_EXTERNO),
         "lattes_ausente": lattes_ausente,
         "api_falhou": api_falhou,
     })
@@ -134,7 +136,8 @@ def inscricao_view(request):
 
     # POST
     action = request.POST.get("action", "rascunho")
-    tipo_servidor = request.POST.get("tipo_servidor", "") if usuario.vinculo == Vinculo.SERVIDOR else ""
+    needs_subtipo = usuario.vinculo in (Vinculo.SERVIDOR, Vinculo.COLABORADOR_EXTERNO)
+    tipo_servidor = request.POST.get("tipo_servidor", "") if needs_subtipo else ""
     criterios = list(_get_criterios(usuario, tipo_servidor))
     form = InscricaoForm(request.POST, request.FILES, usuario=usuario, acao=action)
 
@@ -149,7 +152,7 @@ def inscricao_view(request):
         if inscricao is None:
             inscricao = Inscricao(usuario=usuario, modalidade=usuario.vinculo)
 
-        if usuario.vinculo == Vinculo.SERVIDOR:
+        if needs_subtipo:
             inscricao.tipo_servidor = form.cleaned_data["tipo_servidor"]
 
         pdf = form.cleaned_data.get("comprovantes_pdf")
@@ -159,10 +162,16 @@ def inscricao_view(request):
             inscricao.comprovantes_pdf_tamanho = pdf.size
             inscricao.comprovantes_pdf_mime = getattr(pdf, "content_type", "application/pdf")
 
-        scores, total = _parse_scores(request.POST, criterios)
+        scores, total_manual = _parse_scores(request.POST, criterios)
         api_scores, _ = _resolve_api_scores(usuario, criterios, inscricao)
         scores.update(api_scores)
-        total += sum(api_scores.values())
+        total_api = sum(api_scores.values())
+
+        if usuario.vinculo == Vinculo.SERVIDOR:
+            # Nota final = (IFGProduz + critérios manuais) / 2, cada um capped em 100
+            total = (min(total_manual, Decimal("100")) + min(total_api, Decimal("100"))) / 2
+        else:
+            total = total_manual + total_api
         inscricao.total = total
 
         if action == "enviar":

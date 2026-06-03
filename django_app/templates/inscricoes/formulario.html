@@ -41,7 +41,7 @@
         {% csrf_token %}
         {{ form.non_field_errors }}
 
-        {% if is_servidor %}
+        {% if needs_subtipo %}
         <div style="margin-bottom:16px">
             <label for="{{ form.tipo_servidor.id_for_label }}" style="font-weight:600;display:block;margin-bottom:4px">
                 {{ form.tipo_servidor.label }}
