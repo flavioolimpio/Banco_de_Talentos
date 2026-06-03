@@ -211,7 +211,27 @@ def confirmacao_view(request):
         inscricao = Inscricao.objects.get(usuario=request.user)
     except Inscricao.DoesNotExist:
         return redirect("inscricao")
-    return render(request, "inscricoes/confirmacao.html", {"inscricao": inscricao})
+
+    itens = inscricao.itens.select_related("criterio").order_by("criterio__ordem")
+    num_manual = 0
+    itens_com_num = []
+    total_api = Decimal("0")
+    total_manual = Decimal("0")
+    for item in itens:
+        if item.criterio.is_api:
+            itens_com_num.append((item, None))
+            total_api += item.pontuacao
+        else:
+            num_manual += 1
+            itens_com_num.append((item, num_manual))
+            total_manual += item.pontuacao
+
+    is_servidor = inscricao.modalidade == Vinculo.SERVIDOR
+    ctx = {"inscricao": inscricao, "itens_com_num": itens_com_num, "is_servidor": is_servidor}
+    if is_servidor:
+        ctx["formula_ifgproduz"] = min(total_api, Decimal("100"))
+        ctx["formula_criterios"] = min(total_manual, Decimal("100"))
+    return render(request, "inscricoes/confirmacao.html", ctx)
 
 
 @login_required

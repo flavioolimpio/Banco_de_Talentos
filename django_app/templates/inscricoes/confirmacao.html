@@ -25,6 +25,13 @@
                     {{ inscricao.total|floatformat:1 }}
                     <span style="font-size:14px;font-weight:400">pts</span>
                 </div>
+                {% if is_servidor %}
+                <div style="font-size:11px;color:#888;margin-top:3px;line-height:1.6">
+                    {{ formula_ifgproduz|floatformat:1 }} (IFGProduz)
+                    + {{ formula_criterios|floatformat:1 }} (Crit&eacute;rios)
+                    &divide; 2
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -45,10 +52,17 @@
                 </tr>
             </thead>
             <tbody>
-                {% for item in inscricao.itens.select_related %}
-                <tr style="border-bottom:1px solid #f0f0f0">
-                    <td style="padding:8px 10px;color:#888">{{ item.criterio.ordem }}</td>
-                    <td style="padding:8px 10px;color:#202124">{{ item.criterio.criterio }}</td>
+                {% for item, num in itens_com_num %}
+                <tr style="border-bottom:1px solid #f0f0f0{% if item.criterio.is_api %};background:#f0faf4{% endif %}">
+                    <td style="padding:8px 10px;color:#888">
+                        {% if num %}{{ num }}{% else %}&mdash;{% endif %}
+                    </td>
+                    <td style="padding:8px 10px;color:#202124">
+                        {{ item.criterio.criterio }}
+                        {% if item.criterio.is_api %}
+                        <span style="font-size:10px;background:#168241;color:#fff;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle">IFGProduz</span>
+                        {% endif %}
+                    </td>
                     <td style="padding:8px 10px;text-align:right;font-weight:600;color:#202124">
                         {{ item.pontuacao|floatformat:1 }}
                     </td>
