@@ -88,7 +88,7 @@
                 <div style="font-size:11px;color:#888;margin-bottom:4px">Pontua&ccedil;&atilde;o</div>
                 {% if criterio.is_api %}
                 <input type="hidden" name="score_{{ criterio.pk }}" value="{{ score|stringformat:'.1f' }}">
-                <div data-score data-max="{{ criterio.maximo|stringformat:'.2f' }}" data-value="{{ score|stringformat:'.2f' }}"
+                <div data-score data-api="true" data-max="{{ criterio.maximo|stringformat:'.2f' }}" data-value="{{ score|stringformat:'.2f' }}"
                      style="width:76px;padding:6px;border:2px solid #168241;border-radius:6px;text-align:center;font-size:16px;font-weight:600;background:#fff;color:#168241;box-sizing:border-box">
                     {{ score|floatformat:"1" }}
                 </div>
@@ -124,6 +124,13 @@
                         <span id="total-display">0,0</span>
                         <span style="font-size:14px;font-weight:400">pts</span>
                     </div>
+                    {% if is_servidor %}
+                    <div style="font-size:11px;color:#888;margin-top:3px;line-height:1.6">
+                        <span id="formula-ifgproduz">0,0</span> (IFGProduz)
+                        + <span id="formula-criterios">0,0</span> (Crit&eacute;rios)
+                        &divide; 2
+                    </div>
+                    {% endif %}
                 </div>
                 <div style="display:flex;gap:10px;align-items:center">
                     <button type="submit" name="action" value="rascunho" class="primary-button">
