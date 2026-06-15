@@ -16,6 +16,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from apps.auditoria.models import AuditAction, AuditLog
 from apps.inscricoes.forms_rh import RevisaoForm
 from apps.inscricoes.models import Inscricao, StatusInscricao
+from apps.usuarios.models import Vinculo
 
 
 def _get_client_ip(request):
@@ -26,8 +27,15 @@ def _get_client_ip(request):
 
 
 def _parse_validacoes(post_data, itens):
+    """
+    Lê as notas validadas do POST e separa o total em duas parcelas:
+    critérios manuais e critérios de API (IFGProduz). A separação é
+    necessária porque a nota final do servidor é a média das duas, e não
+    a soma crua de todos os itens.
+    """
     validacoes = {}
-    total = Decimal("0.00")
+    total_manual = Decimal("0.00")
+    total_api = Decimal("0.00")
     for item in itens:
         raw = post_data.get(f"validado_{item.pk}", "").strip()
         obs = post_data.get(f"obs_{item.pk}", "").strip()
@@ -40,8 +48,22 @@ def _parse_validacoes(post_data, itens):
         else:
             valor = item.pontuacao
         validacoes[item.pk] = {"pontuacao_validada": valor, "observacao": obs}
-        total += valor
-    return validacoes, total
+        if item.criterio.is_api:
+            total_api += valor
+        else:
+            total_manual += valor
+    return validacoes, total_manual, total_api
+
+
+def _calcular_total_validado(modalidade, total_manual, total_api):
+    """
+    Calcula a nota validada final. Para servidor, aplica a mesma fórmula do
+    candidato: (min(IFGProduz, 100) + min(critérios, 100)) / 2.
+    Para as demais modalidades, é a soma simples das parcelas.
+    """
+    if modalidade == Vinculo.SERVIDOR:
+        return (min(total_manual, Decimal("100")) + min(total_api, Decimal("100"))) / 2
+    return total_manual + total_api
 
 
 @staff_member_required
@@ -91,7 +113,8 @@ def revisao_view(request, pk):
             "form": form,
         })
 
-    validacoes, total_validado = _parse_validacoes(request.POST, itens)
+    validacoes, total_manual, total_api = _parse_validacoes(request.POST, itens)
+    total_validado = _calcular_total_validado(inscricao.modalidade, total_manual, total_api)
 
     with transaction.atomic():
         for item in itens:

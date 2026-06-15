@@ -302,7 +302,8 @@
 }
 </style>
 
-<div class="revisao-wrapper">
+<div class="revisao-wrapper" id="revisao-dados"
+     data-servidor="{% if inscricao.modalidade == 'servidor' %}true{% else %}false{% endif %}">
 
     {# ── Cabeçalho ──────────────────────────────────────────── #}
     <div class="revisao-header">
@@ -377,6 +378,7 @@
                                     step="0.1"
                                     placeholder="{{ item.pontuacao|floatformat:1 }}"
                                     data-candidato="{{ item.pontuacao }}"
+                                    {% if item.criterio.is_api %}data-api="true"{% endif %}
                                     value="{{ valor_validado }}"
                                 >
                             </div>
@@ -415,6 +417,12 @@
                             <div class="total-valor total-validado-val">
                                 <span id="total-validado">{{ inscricao.total_validado|floatformat:1 }}</span><span class="pts">pts</span>
                             </div>
+                            {% if inscricao.modalidade == 'servidor' %}
+                            <div style="font-size:11px;color:#888;margin-top:3px;line-height:1.5">
+                                <span id="formula-validado-api">0,0</span> (IFGProduz)
+                                + <span id="formula-validado-crit">0,0</span> (Crit&eacute;rios) &divide; 2
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -452,24 +460,55 @@
 (function () {
     "use strict";
 
-    var inputs = document.querySelectorAll('[id^="validado_"]');
-    var spanTotal = document.getElementById("total-validado");
+    var inputs      = document.querySelectorAll('[id^="validado_"]');
+    var spanTotal   = document.getElementById("total-validado");
+    var dados       = document.getElementById("revisao-dados");
+    var isServidor  = dados && dados.dataset.servidor === "true";
+    var formulaApi  = document.getElementById("formula-validado-api");
+    var formulaCrit = document.getElementById("formula-validado-crit");
+
+    function fmt(n) {
+        return n.toFixed(1).replace('.', ',');
+    }
+
+    // valor considerado de um input: o digitado pelo RH ou, se vazio,
+    // a pontuação declarada pelo candidato (data-candidato)
+    function valorDe(inp) {
+        var raw = inp.value.trim();
+        if (raw !== "") {
+            var v = parseFloat(raw);
+            return isNaN(v) ? 0 : v;
+        }
+        var cand = parseFloat(inp.dataset.candidato);
+        return isNaN(cand) ? 0 : cand;
+    }
 
     function calcularTotal() {
-        var soma = 0;
+        var totalManual = 0;
+        var totalApi = 0;
         inputs.forEach(function (inp) {
-            var raw = inp.value.trim();
-            if (raw !== "") {
-                var v = parseFloat(raw);
-                if (!isNaN(v)) { soma += v; }
+            var v = valorDe(inp);
+            if (inp.dataset.api === "true") {
+                totalApi += v;
             } else {
-                // sem entrada → usa pontuação declarada pelo candidato
-                var cand = parseFloat(inp.dataset.candidato);
-                if (!isNaN(cand)) { soma += cand; }
+                totalManual += v;
             }
         });
+
+        var total;
+        if (isServidor) {
+            // mesma fórmula do candidato: (min(IFGProduz,100) + min(critérios,100)) / 2
+            var apiCap  = Math.min(totalApi, 100);
+            var critCap = Math.min(totalManual, 100);
+            total = (apiCap + critCap) / 2;
+            if (formulaApi)  { formulaApi.textContent  = fmt(apiCap); }
+            if (formulaCrit) { formulaCrit.textContent = fmt(critCap); }
+        } else {
+            total = totalManual + totalApi;
+        }
+
         if (spanTotal) {
-            spanTotal.textContent = soma.toFixed(1);
+            spanTotal.textContent = fmt(total);
         }
     }
 
