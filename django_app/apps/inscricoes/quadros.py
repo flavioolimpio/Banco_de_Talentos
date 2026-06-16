@@ -110,56 +110,11 @@ QUADROS_INSCRICAO: dict[str, list[dict]] = {
             "maximo": 9.0,
         },
     ],
-    "servidor_apoio_tecnico": [
-        {
-            "id": "formacao_academica",
-            "criterio": "Formação acadêmica",
-            "regra": "Médio completo: 10 pts / Graduando: 15 pts / Graduado: 25 pts / Especialista: 35 pts / Mestre: 50 pts / Doutor: 70 pts",
-            "maximo": 70.0,
-        },
-        {
-            "id": "experiencia_profissional_area",
-            "criterio": "Experiência profissional na área de formação/atuação",
-            "regra": "0,3 ponto por mês",
-            "maximo": 120.0,
-        },
-        {
-            "id": "gestao_projetos_pdi_ict",
-            "criterio": "Experiência em gestão de projetos de PD&I e/ou ET no Polo de Inovação do IFG ou de outra ICT",
-            "regra": "1,5 ponto por projeto, por mês",
-            "maximo": 180.0,
-        },
-        {
-            "id": "gestao_projetos_externos",
-            "criterio": "Experiência em gestão de projetos externos: empresas, agências de fomento, editais públicos",
-            "regra": "1,0 ponto por projeto, por mês",
-            "maximo": 120.0,
-        },
-        {
-            "id": "comunicacao_cientifica",
-            "criterio": "Experiência em comunicação científica, divulgação e popularização da ciência",
-            "regra": "0,5 ponto por mês",
-            "maximo": 60.0,
-        },
-        {
-            "id": "analise_dados_relatorios",
-            "criterio": "Experiência comprovada em análise de dados, produção de relatórios técnicos ou gestão de informações em projetos",
-            "regra": "0,5 ponto por mês",
-            "maximo": 60.0,
-        },
-        {
-            "id": "capacitacoes_polo",
-            "criterio": "Participação concluída em capacitações promovidas pelo Polo de Inovação do IFG",
-            "regra": "0,3 ponto por participação",
-            "maximo": 9.0,
-        },
-        {
-            "id": "producao_tecnica",
-            "criterio": "Produção técnica relevante: artigo, relatório técnico publicado, produto de comunicação científica documentado",
-            "regra": "1 ponto por produção",
-            "maximo": 10.0,
-        },
-    ],
+    # NOTA: o quadro "servidor_apoio_tecnico" foi APOSENTADO. O Servidor
+    # tipo Apoio Técnico passou a usar o mesmo quadro do Pesquisador
+    # (chave "servidor", tipo_servidor=""). Os critérios antigos que ainda
+    # existem no banco foram desativados (ativo=False) pela migration 0009,
+    # e não são mais repovoados por este arquivo.
     # Quadro I — Colaborador Externo / Pesquisador.
     # Critérios conforme o Edital PROPPG nº 30/2026, item 5.3 (13 itens).
     # Fonte: docs/criterios-colab-externo-edital-30-2026.md
