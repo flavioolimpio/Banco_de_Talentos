@@ -27,7 +27,8 @@ class QuadrosInscricaoTest(TestCase):
         self.assertEqual(len(QUADROS_INSCRICAO["estudante"]), 8)
 
     def test_quantidade_criterios_colaborador_externo(self):
-        self.assertEqual(len(QUADROS_INSCRICAO["colaborador_externo"]), 9)
+        # Quadro I (Pesquisador) do Edital PROPPG nº 30/2026: 13 itens.
+        self.assertEqual(len(QUADROS_INSCRICAO["colaborador_externo"]), 13)
 
     def test_campos_obrigatorios_em_cada_item(self):
         for modalidade, itens in QUADROS_INSCRICAO.items():
