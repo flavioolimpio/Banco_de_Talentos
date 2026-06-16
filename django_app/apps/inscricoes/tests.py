@@ -261,10 +261,31 @@ class InscricaoFormTest(TestCase):
         self.assertTrue(form.is_valid())
 
     def test_aceite_envio_true_com_enviar_valido(self):
+        pdf = SimpleUploadedFile("comp.pdf", b"%PDF-1.4 ok", content_type="application/pdf")
+        form = InscricaoForm(
+            {"tipo_servidor": "", "aceite_envio": True},
+            files={"comprovantes_pdf": pdf},
+            usuario=self._usuario(),
+            acao="enviar",
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_enviar_sem_pdf_invalido(self):
         form = InscricaoForm(
             {"tipo_servidor": "", "aceite_envio": True},
             usuario=self._usuario(),
             acao="enviar",
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("comprovantes_pdf", form.errors)
+
+    def test_enviar_sem_pdf_mas_com_tem_pdf_valido(self):
+        # Reenvio: já há PDF guardado (tem_pdf=True), não exige novo upload.
+        form = InscricaoForm(
+            {"tipo_servidor": "", "aceite_envio": True},
+            usuario=self._usuario(),
+            acao="enviar",
+            tem_pdf=True,
         )
         self.assertTrue(form.is_valid())
 
@@ -364,6 +385,10 @@ class InscricaoViewPostTest(TestCase):
     def _scores(self, valor="0"):
         return {f"score_{c.pk}": valor for c in self.criterios}
 
+    def _pdf(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return SimpleUploadedFile("comp.pdf", b"%PDF-1.4 ok", content_type="application/pdf")
+
     def test_rascunho_cria_inscricao(self):
         data = {"action": "rascunho", **self._scores("5")}
         self.client.post(reverse("inscricao"), data)
@@ -394,27 +419,49 @@ class InscricaoViewPostTest(TestCase):
         self.assertTrue(AuditLog.objects.filter(acao=AuditAction.INSCRICAO_SALVA).exists())
 
     def test_enviar_define_enviada_em(self):
-        data = {"action": "enviar", "aceite_envio": True, **self._scores("0")}
+        data = {"action": "enviar", "aceite_envio": True, "comprovantes_pdf": self._pdf(), **self._scores("0")}
         self.client.post(reverse("inscricao"), data)
         inscricao = Inscricao.objects.get(usuario=self.candidato)
         self.assertIsNotNone(inscricao.enviada_em)
 
     def test_enviar_status_em_analise(self):
-        data = {"action": "enviar", "aceite_envio": True, **self._scores("0")}
+        data = {"action": "enviar", "aceite_envio": True, "comprovantes_pdf": self._pdf(), **self._scores("0")}
         self.client.post(reverse("inscricao"), data)
         inscricao = Inscricao.objects.get(usuario=self.candidato)
         self.assertEqual(inscricao.status, StatusInscricao.EM_ANALISE)
 
     def test_enviar_redireciona_para_confirmacao(self):
-        data = {"action": "enviar", "aceite_envio": True, **self._scores("0")}
+        data = {"action": "enviar", "aceite_envio": True, "comprovantes_pdf": self._pdf(), **self._scores("0")}
         response = self.client.post(reverse("inscricao"), data)
         self.assertRedirects(response, reverse("inscricao_confirmacao"))
 
     def test_enviar_sem_aceite_retorna_form_com_erro(self):
-        data = {"action": "enviar", "aceite_envio": False, **self._scores("0")}
+        data = {"action": "enviar", "aceite_envio": False, "comprovantes_pdf": self._pdf(), **self._scores("0")}
         response = self.client.post(reverse("inscricao"), data)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "verdadeiros")
+
+    def test_enviar_sem_pdf_bloqueia(self):
+        data = {"action": "enviar", "aceite_envio": True, **self._scores("0")}
+        response = self.client.post(reverse("inscricao"), data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "anexar o PDF")
+        # Envio bloqueado: nada é salvo/enviado.
+        self.assertFalse(Inscricao.objects.filter(usuario=self.candidato).exists())
+
+    def test_enviar_com_pdf_ja_anexado_ok(self):
+        # Reenvio: já existe PDF guardado, não exige novo upload.
+        Inscricao.objects.create(
+            usuario=self.candidato,
+            modalidade="estudante",
+            status=StatusInscricao.PENDENTE,
+            comprovantes_pdf=self._pdf(),
+        )
+        data = {"action": "enviar", "aceite_envio": True, **self._scores("0")}
+        response = self.client.post(reverse("inscricao"), data)
+        self.assertRedirects(response, reverse("inscricao_confirmacao"))
+        inscricao = Inscricao.objects.get(usuario=self.candidato)
+        self.assertEqual(inscricao.status, StatusInscricao.EM_ANALISE)
 
     def test_pontuacao_maxima_respeitada(self):
         criterio = self.criterios[0]
