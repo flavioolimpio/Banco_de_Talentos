@@ -339,6 +339,13 @@ class InscricaoViewGetTest(TestCase):
         response = self.client.get(reverse("inscricao"))
         self.assertContains(response, "preparação")
 
+    def test_exibe_apenas_edital_da_modalidade(self):
+        # candidato é Estudante → vê só o edital 31/2026, não os outros.
+        response = self.client.get(reverse("inscricao"))
+        self.assertContains(response, "46637-edital-proppg-n-31-2026")
+        self.assertNotContains(response, "46636-edital-proppg-n-30-2026")
+        self.assertNotContains(response, "46583-edital-proppg-n-29-2026")
+
 
 class InscricaoSubtipoCriteriosTest(TestCase):
     """Colaborador Externo: trocar a categoria (?tipo=...) troca o quadro."""
@@ -367,6 +374,12 @@ class InscricaoSubtipoCriteriosTest(TestCase):
         response = self.client.get(reverse("inscricao"), {"tipo": "pesquisador"})
         self.assertContains(response, escape("Estágio pós-doutoramento"))
         self.assertNotContains(response, escape("Experiência em comunicação científica"))
+
+    def test_exibe_edital_colaborador_externo(self):
+        # candidato é Colaborador Externo → vê o edital 30/2026.
+        response = self.client.get(reverse("inscricao"))
+        self.assertContains(response, "46636-edital-proppg-n-30-2026")
+        self.assertNotContains(response, "46637-edital-proppg-n-31-2026")
 
 
 class InscricaoViewPostTest(TestCase):

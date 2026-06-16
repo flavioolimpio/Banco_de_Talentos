@@ -20,6 +20,28 @@ from apps.inscricoes.services import buscar_pontuacao_ifgproduz
 from apps.usuarios.models import Vinculo
 
 
+# Editais da Chamada Pública por vínculo (links oficiais do site do IFG).
+# Exibidos no topo da página "Minha Inscrição" para o candidato consultar
+# o edital da sua modalidade antes de preencher.
+EDITAIS = {
+    Vinculo.ESTUDANTE: {
+        "descricao": "Estudantes",
+        "nome": "Edital PROPPG nº 31/2026",
+        "url": "https://www.ifg.edu.br/editais-pesquisa-e-pos-graduacao/pesquisa-inovacao-em-andamento/46637-edital-proppg-n-31-2026-de-28-de-maio-de-2026",
+    },
+    Vinculo.COLABORADOR_EXTERNO: {
+        "descricao": "Colaboradores Externos",
+        "nome": "Edital PROPPG nº 30/2026",
+        "url": "https://www.ifg.edu.br/editais-pesquisa-e-pos-graduacao/pesquisa-inovacao-em-andamento/46636-edital-proppg-n-30-2026-de-28-de-maio-de-2026",
+    },
+    Vinculo.SERVIDOR: {
+        "descricao": "Servidores do IFG",
+        "nome": "Edital PROPPG nº 29/2026",
+        "url": "https://www.ifg.edu.br/editais-pesquisa-e-pos-graduacao/pesquisa-inovacao-em-andamento/46583-edital-proppg-n-29-2026",
+    },
+}
+
+
 def _get_client_ip(request):
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if forwarded_for:
@@ -107,6 +129,8 @@ def _render_form(request, form, criterios, inscricao, scores=None, lattes_ausent
         "needs_subtipo": vinculo in (Vinculo.SERVIDOR, Vinculo.COLABORADOR_EXTERNO),
         "lattes_ausente": lattes_ausente,
         "api_falhou": api_falhou,
+        "edital": EDITAIS.get(vinculo),
+        "editais_todos": list(EDITAIS.values()),
     })
 
 
