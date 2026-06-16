@@ -28,9 +28,14 @@ def _get_client_ip(request):
 
 
 def _get_criterios(usuario, tipo_servidor=""):
-    # Critérios de pesquisador ficam com tipo_servidor="" (quadro compartilhado de servidor).
-    # Apenas apoio_tecnico tem quadro próprio.
-    ts = tipo_servidor if tipo_servidor == TipoServidor.APOIO_TECNICO else ""
+    # Servidor: Pesquisador e Apoio Técnico usam o MESMO quadro (tipo_servidor="").
+    #   O subtipo continua sendo registrado na inscrição, mas a pontuação é idêntica.
+    # Colaborador Externo: Apoio Técnico tem quadro próprio (Quadro II), por isso
+    #   mantemos o desvio apenas para essa modalidade.
+    if usuario.vinculo == Vinculo.SERVIDOR:
+        ts = ""
+    else:
+        ts = tipo_servidor if tipo_servidor == TipoServidor.APOIO_TECNICO else ""
     return CriterioEdital.objects.filter(
         modalidade=usuario.vinculo,
         tipo_servidor=ts,
@@ -188,6 +193,12 @@ def inscricao_view(request):
                 criterio=criterio,
                 defaults={"pontuacao": scores.get(criterio.pk, Decimal("0"))},
             )
+
+        # Remove itens que não fazem mais parte do quadro atual (ex.: critérios
+        # de um quadro antigo após mudança de regras). Sem isso, ao reenviar a
+        # inscrição os itens obsoletos ficariam órfãos e apareceriam na revisão.
+        criterio_ids_atuais = [c.pk for c in criterios]
+        inscricao.itens.exclude(criterio_id__in=criterio_ids_atuais).delete()
 
         AuditLog.objects.create(
             ator=usuario,
