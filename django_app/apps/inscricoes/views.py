@@ -126,7 +126,18 @@ def inscricao_view(request):
         inscricao = None
 
     if request.method == "GET":
-        tipo_servidor = inscricao.tipo_servidor if inscricao else ""
+        # A categoria (tipo_servidor) define qual quadro de critérios mostrar.
+        # Para Colaborador Externo, Pesquisador e Apoio Técnico têm quadros
+        # diferentes, então o JS recarrega a página com ?tipo=... ao trocar o
+        # seletor. Prioridade: parâmetro da URL > inscrição existente > vazio.
+        tipos_validos = {c[0] for c in TipoServidor.choices}
+        tipo_param = request.GET.get("tipo", "")
+        if tipo_param in tipos_validos:
+            tipo_servidor = tipo_param
+        elif inscricao:
+            tipo_servidor = inscricao.tipo_servidor
+        else:
+            tipo_servidor = ""
         criterios = list(_get_criterios(usuario, tipo_servidor))
         itens_existentes = {}
         if inscricao:
@@ -138,7 +149,9 @@ def inscricao_view(request):
 
         lattes_ausente = usuario.vinculo == Vinculo.SERVIDOR and not usuario.lattes
         return _render_form(
-            request, InscricaoForm(usuario=usuario), criterios, inscricao,
+            request,
+            InscricaoForm(usuario=usuario, initial={"tipo_servidor": tipo_servidor}),
+            criterios, inscricao,
             itens_existentes, lattes_ausente=lattes_ausente, api_falhou=api_falhou,
         )
 

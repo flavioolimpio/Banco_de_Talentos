@@ -319,6 +319,35 @@ class InscricaoViewGetTest(TestCase):
         self.assertContains(response, "preparação")
 
 
+class InscricaoSubtipoCriteriosTest(TestCase):
+    """Colaborador Externo: trocar a categoria (?tipo=...) troca o quadro."""
+
+    def setUp(self):
+        call_command("popular_criterios", verbosity=0)
+        self.candidato = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="colab@test.com",
+            nome_completo="Colaborador Teste",
+            vinculo=Vinculo.COLABORADOR_EXTERNO,
+            password="senha123",
+        )
+        self.client.force_login(self.candidato)
+
+    def test_tipo_apoio_tecnico_mostra_quadro_ii(self):
+        from django.utils.html import escape
+        response = self.client.get(reverse("inscricao"), {"tipo": "apoio_tecnico"})
+        # item exclusivo do Quadro II (Apoio Técnico)
+        self.assertContains(response, escape("Experiência em comunicação científica"))
+        # item exclusivo do Quadro I (Pesquisador) não deve aparecer
+        self.assertNotContains(response, escape("Estágio pós-doutoramento"))
+
+    def test_tipo_pesquisador_mostra_quadro_i(self):
+        from django.utils.html import escape
+        response = self.client.get(reverse("inscricao"), {"tipo": "pesquisador"})
+        self.assertContains(response, escape("Estágio pós-doutoramento"))
+        self.assertNotContains(response, escape("Experiência em comunicação científica"))
+
+
 class InscricaoViewPostTest(TestCase):
     def setUp(self):
         call_command("popular_criterios", verbosity=0)
