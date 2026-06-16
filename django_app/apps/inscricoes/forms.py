@@ -30,9 +30,12 @@ class InscricaoForm(forms.Form):
         widget=forms.CheckboxInput(attrs={"style": "margin:0;padding:0;flex-shrink:0;cursor:pointer;width:14px;height:14px"}),
     )
 
-    def __init__(self, *args, usuario=None, acao=None, **kwargs):
+    def __init__(self, *args, usuario=None, acao=None, tem_pdf=False, **kwargs):
         self.usuario = usuario
         self.acao = acao
+        # tem_pdf indica que a inscrição já possui um PDF guardado (caso de
+        # reenvio): nesse caso não exigimos um novo upload para enviar.
+        self.tem_pdf = tem_pdf
         super().__init__(*args, **kwargs)
 
     def clean_comprovantes_pdf(self):
@@ -55,9 +58,16 @@ class InscricaoForm(forms.Form):
         needs_subtipo = self.usuario and self.usuario.vinculo in (Vinculo.SERVIDOR, Vinculo.COLABORADOR_EXTERNO)
         if needs_subtipo and not cleaned_data.get("tipo_servidor"):
             self.add_error("tipo_servidor", "Selecione a categoria.")
-        if self.acao == "enviar" and not cleaned_data.get("aceite_envio"):
-            self.add_error(
-                "aceite_envio",
-                "É necessário confirmar que os dados são verdadeiros para enviar.",
-            )
+        if self.acao == "enviar":
+            if not cleaned_data.get("aceite_envio"):
+                self.add_error(
+                    "aceite_envio",
+                    "É necessário confirmar que os dados são verdadeiros para enviar.",
+                )
+            # Exige PDF de comprovantes no envio. Aceita o já anexado (reenvio).
+            if not cleaned_data.get("comprovantes_pdf") and not self.tem_pdf:
+                self.add_error(
+                    "comprovantes_pdf",
+                    "É necessário anexar o PDF de comprovantes para enviar a inscrição.",
+                )
         return cleaned_data

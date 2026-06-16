@@ -160,7 +160,10 @@ def inscricao_view(request):
     needs_subtipo = usuario.vinculo in (Vinculo.SERVIDOR, Vinculo.COLABORADOR_EXTERNO)
     tipo_servidor = request.POST.get("tipo_servidor", "") if needs_subtipo else ""
     criterios = list(_get_criterios(usuario, tipo_servidor))
-    form = InscricaoForm(request.POST, request.FILES, usuario=usuario, acao=action)
+    form = InscricaoForm(
+        request.POST, request.FILES, usuario=usuario, acao=action,
+        tem_pdf=bool(inscricao and inscricao.comprovantes_pdf),
+    )
 
     if not form.is_valid():
         scores, _ = _parse_scores(request.POST, criterios)
