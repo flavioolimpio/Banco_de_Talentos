@@ -47,4 +47,17 @@
     });
 
     updateTotal();
+
+    // Ao trocar a categoria (tipo_servidor), recarrega o formulário com os
+    // critérios do quadro correspondente. Necessário porque os critérios são
+    // renderizados no servidor (ex.: Colaborador Externo Pesquisador x Apoio
+    // Técnico têm quadros diferentes).
+    var tipoSelect = document.getElementById('id_tipo_servidor');
+    if (tipoSelect) {
+        tipoSelect.addEventListener('change', function () {
+            var url = new URL(window.location.href);
+            url.searchParams.set('tipo', tipoSelect.value);
+            window.location.href = url.toString();
+        });
+    }
 }());
