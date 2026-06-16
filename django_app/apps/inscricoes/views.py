@@ -117,7 +117,10 @@ def inscricao_view(request):
 
     try:
         inscricao = Inscricao.objects.get(usuario=usuario)
-        if inscricao.enviada_em:
+        # Trava o formulário depois de enviado. Exceção: se o RH devolveu a
+        # inscrição para "Pendente" no admin, o candidato pode reabrir e
+        # reenviar (ex.: após uma mudança de regras do edital).
+        if inscricao.enviada_em and inscricao.status != StatusInscricao.PENDENTE:
             return redirect("inscricao_confirmacao")
     except Inscricao.DoesNotExist:
         inscricao = None
