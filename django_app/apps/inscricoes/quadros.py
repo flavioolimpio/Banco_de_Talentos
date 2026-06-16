@@ -160,35 +160,62 @@ QUADROS_INSCRICAO: dict[str, list[dict]] = {
             "maximo": 10.0,
         },
     ],
+    # Quadro I — Colaborador Externo / Pesquisador.
+    # Critérios conforme o Edital PROPPG nº 30/2026, item 5.3 (13 itens).
+    # Fonte: docs/criterios-colab-externo-edital-30-2026.md
     "colaborador_externo": [
         {
             "id": "titulacao",
             "criterio": "Titulação",
-            "regra": "Técnico de Nível Médio/Graduando: 10 pts | Graduado: 20 pts | Especialista (Lato Sensu): 30 pts | Mestre: 40 pts | Doutor: 70 pts.",
-            "maximo": 70.0,
+            "regra": "Técnico Nível Médio: 10 pts | Graduado: 20 pts | Especialista (Lato Sensu): 40 pts | Mestre: 60 pts | Doutor: 100 pts.",
+            "maximo": 100.0,
+        },
+        {
+            "id": "estagio_posdoc",
+            "criterio": "Estágio pós-doutoramento",
+            "regra": "5 pontos (valor fixo).",
+            "maximo": 5.0,
         },
         {
             "id": "experiencia_profissional_area",
-            "criterio": "Experiência profissional comprovada em sua área de formação/atuação",
-            "regra": "2 pontos por mês.",
-            "maximo": 720.0,
+            "criterio": "Experiência profissional comprovada em sua área de formação/atuação fora da sua ICT",
+            "regra": "0,3 ponto por mês.",
+            "maximo": 120.0,
+        },
+        {
+            "id": "exp_gestao_fora_ict",
+            "criterio": "Experiência profissional comprovada em nível de gestão em sua área de formação/atuação fora da sua ICT",
+            "regra": "0,4 ponto por mês.",
+            "maximo": 180.0,
+        },
+        {
+            "id": "coord_projetos_empresas_fundacao",
+            "criterio": "Experiência na coordenação de projetos com/em empresas privadas/públicas e interveniência de fundação de apoio",
+            "regra": "1,3 ponto por projeto, por mês.",
+            "maximo": 480.0,
         },
         {
             "id": "projetos_pdi_et_polo",
-            "criterio": "Experiência em desenvolvimento e execução de projetos de PD&I e/ou ET com empresa privada/pública no âmbito do Polo de Inovação do IFG",
-            "regra": "2 pontos por mês.",
+            "criterio": "Experiência em desenvolvimento e execução de projetos de PD&I com empresas privadas/públicas no âmbito do Polo de Inovação do IFG",
+            "regra": "1 ponto por projeto, por mês.",
             "maximo": 360.0,
         },
         {
             "id": "projetos_pdi_et_fora_polo",
-            "criterio": "Experiência em desenvolvimento e execução de projetos de PD&I e/ou ET com empresa privada/pública fora do âmbito do Polo de Inovação",
-            "regra": "1,5 ponto por mês.",
-            "maximo": 180.0,
+            "criterio": "Experiência em desenvolvimento e execução de projetos de PD&I e/ou ET com empresas privadas/públicas fora do âmbito do Polo de Inovação",
+            "regra": "0,7 ponto por projeto, por mês.",
+            "maximo": 200.0,
         },
         {
-            "id": "projetos_pesquisa_inovacao_extensao_formacao",
-            "criterio": "Experiência na participação em projetos de pesquisa, inovação e/ou extensão durante seu curso de formação",
-            "regra": "0,5 ponto por projeto, por mês.",
+            "id": "coord_projetos_fomento_publico",
+            "criterio": "Experiência na coordenação de projetos de pesquisa e inovação fomentados por agências públicas (ex.: CNPq) ou Editais internos de uma ICT",
+            "regra": "0,8 ponto por projeto, por semestre.",
+            "maximo": 200.0,
+        },
+        {
+            "id": "orientacao_participacao_fomento",
+            "criterio": "Experiência na orientação/coorientação/participação de projetos de pesquisa e/ou inovação fomentados por agências públicas ou Editais internos de uma ICT",
+            "regra": "0,3 ponto por projeto, por semestre.",
             "maximo": 120.0,
         },
         {
