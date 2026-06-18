@@ -868,3 +868,98 @@ class InscricaoAdminLinkRevisarTest(TestCase):
         ma = InscricaoAdmin(Inscricao, self.site)
         resultado = ma.link_revisar(inscricao)
         self.assertEqual(resultado, "—")
+
+
+class ExportarAprovadasCommandTest(TestCase):
+    def setUp(self):
+        from apps.usuarios.models import Usuario, Vinculo
+
+        # 1 aprovada (com acento no nome e nota validada) + 1 em outro status.
+        aprovada = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="conceicao@test.com",
+            nome_completo="João da Conceição",
+            vinculo=Vinculo.SERVIDOR,
+            password="senha123",
+        )
+        Inscricao.objects.create(
+            usuario=aprovada,
+            modalidade=Vinculo.SERVIDOR,
+            tipo_servidor="pesquisador",
+            status=StatusInscricao.APROVADA,
+            total_validado=Decimal("42.50"),
+        )
+        em_analise = Usuario.objects.create_user(
+            cpf="52998224725",
+            email="emanalise@test.com",
+            nome_completo="Maria Inês",
+            vinculo=Vinculo.ESTUDANTE,
+            password="senha123",
+        )
+        Inscricao.objects.create(
+            usuario=em_analise,
+            modalidade=Vinculo.ESTUDANTE,
+            status=StatusInscricao.EM_ANALISE,
+            total_validado=Decimal("10.00"),
+        )
+
+    def _exportar(self):
+        import os
+        import tempfile
+
+        fd, caminho = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        call_command("exportar_aprovadas", "--saida", caminho, verbosity=0)
+        # Lê com utf-8-sig para descartar o BOM e validar o conteúdo.
+        with open(caminho, encoding="utf-8-sig", newline="") as arquivo:
+            conteudo = arquivo.read()
+        os.remove(caminho)
+        return caminho, conteudo
+
+    def test_gera_arquivo_com_bom_utf8(self):
+        import os
+        import tempfile
+
+        fd, caminho = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        call_command("exportar_aprovadas", "--saida", caminho, verbosity=0)
+        with open(caminho, "rb") as arquivo:
+            primeiros_bytes = arquivo.read(3)
+        os.remove(caminho)
+        # BOM de UTF-8 — é o que faz o Excel pt-BR ler os acentos certos.
+        self.assertEqual(primeiros_bytes, b"\xef\xbb\xbf")
+
+    def test_cabecalho_correto(self):
+        _, conteudo = self._exportar()
+        primeira_linha = conteudo.splitlines()[0]
+        self.assertEqual(
+            primeira_linha, "Nome;Modalidade;Categoria;Email;Pontuação"
+        )
+
+    def test_apenas_aprovadas_e_nota_validada_com_virgula(self):
+        _, conteudo = self._exportar()
+        # A aprovada aparece, com nome acentuado preservado e nota com vírgula.
+        self.assertIn("João da Conceição", conteudo)
+        self.assertIn("42,50", conteudo)
+        # A "em análise" NÃO entra na planilha.
+        self.assertNotIn("Maria Inês", conteudo)
+        # Cabeçalho + exatamente 1 linha de dados.
+        linhas = [l for l in conteudo.splitlines() if l.strip()]
+        self.assertEqual(len(linhas), 2)
+
+    def test_sem_aprovadas_nao_gera_arquivo(self):
+        import os
+        import tempfile
+
+        Inscricao.objects.filter(status=StatusInscricao.APROVADA).update(
+            status=StatusInscricao.EM_ANALISE
+        )
+        fd, caminho = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        os.remove(caminho)  # garante que o caminho não existe
+        call_command("exportar_aprovadas", "--saida", caminho, verbosity=0)
+        # Sem aprovadas, o comando não deve criar o arquivo.
+        existe = os.path.exists(caminho)
+        if existe:
+            os.remove(caminho)
+        self.assertFalse(existe)
