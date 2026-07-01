@@ -1,8 +1,9 @@
 # apps/inscricoes/management/commands/exportar_servidores_convocados.py
 # Banco de Talentos — Polo de Inovação IFG
 # Exporta um .xlsx com as inscrições de Servidor(a) aprovadas, contendo
-# Nome, CPF, Titulação (nível de formação) e Pontuação validada pelo RH,
-# ordenadas da maior para a menor pontuação — ordem de convocação.
+# Nome, CPF, Categoria (Pesquisador/Apoio Técnico), Titulação (nível de
+# formação) e Pontuação validada pelo RH, ordenadas da maior para a menor
+# pontuação — ordem de convocação.
 #
 # ATENÇÃO — dado sensível: o CPF sai completo neste arquivo porque o
 # Prof. Flávio confirmou que é para publicação de convocados (decisão
@@ -28,7 +29,8 @@ from apps.usuarios.models import Vinculo
 class Command(BaseCommand):
     help = (
         "Gera um .xlsx das inscrições de Servidor(a) aprovadas com Nome, CPF, "
-        "Titulação e Pontuação validada, ordenadas por pontuação (convocação)."
+        "Categoria, Titulação e Pontuação validada, ordenadas por pontuação "
+        "(convocação)."
     )
 
     def add_arguments(self, parser):
@@ -66,7 +68,7 @@ class Command(BaseCommand):
         ws = wb.active
         ws.title = "Convocados"
 
-        cabecalho = ["Nome", "CPF", "Titulação", "Pontuação Validada"]
+        cabecalho = ["Nome", "CPF", "Categoria", "Titulação", "Pontuação Validada"]
         ws.append(cabecalho)
         for celula in ws[1]:
             celula.font = Font(bold=True)
@@ -77,12 +79,13 @@ class Command(BaseCommand):
                 [
                     usuario.nome_completo,
                     usuario.cpf,
+                    ins.get_tipo_servidor_display() or "—",
                     usuario.nivel_formacao or "—",
                     float(ins.total_validado),
                 ]
             )
 
-        for coluna, largura in zip("ABCD", [40, 16, 28, 20]):
+        for coluna, largura in zip("ABCDE", [40, 16, 18, 28, 20]):
             ws.column_dimensions[coluna].width = largura
 
         wb.save(caminho)

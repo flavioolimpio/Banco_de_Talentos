@@ -12,6 +12,8 @@ media/
 *.sqlite3
 *.csv
 *.xlsx
+*.pdf
+indicacoes-quadros-2026/
 
 # Segredos
 .env
