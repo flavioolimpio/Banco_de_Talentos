@@ -4,6 +4,7 @@
 
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -148,6 +149,13 @@ def inscricao_view(request):
             return redirect("inscricao_confirmacao")
     except Inscricao.DoesNotExist:
         inscricao = None
+
+    # Suspensão temporária das inscrições (flag no .env). Fica DEPOIS do
+    # redirect acima (quem já enviou continua vendo a confirmação) e ANTES
+    # do GET/POST: uma única checagem bloqueia também reenvios diretos por
+    # formulário salvo/curl — validação sempre no backend.
+    if not settings.INSCRICOES_ABERTAS:
+        return render(request, "inscricoes/suspensas.html")
 
     if request.method == "GET":
         # A categoria (tipo_servidor) define qual quadro de critérios mostrar.

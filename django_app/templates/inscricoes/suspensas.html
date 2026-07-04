@@ -1,0 +1,18 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Inscri&ccedil;&otilde;es suspensas — Banco de Especialistas IFG{% endblock %}
+
+{% block page_content %}
+<div style="max-width:640px;margin:64px auto;padding:32px 24px;text-align:center">
+    <h1 style="color:#168241;font-size:24px;margin-bottom:12px">
+        Inscri&ccedil;&otilde;es temporariamente suspensas
+    </h1>
+    <p style="color:#202124;font-size:15px;line-height:1.6">
+        O per&iacute;odo de inscri&ccedil;&otilde;es do Banco de Especialistas est&aacute;
+        temporariamente suspenso. Acompanhe os comunicados oficiais do
+        Polo de Inova&ccedil;&atilde;o do IFG para saber quando ser&aacute; reaberto.
+    </p>
+    <p style="margin-top:24px">
+        <a href="{% url 'home' %}" class="home-cta" style="text-decoration:none">Voltar &agrave; p&aacute;gina inicial</a>
+    </p>
+</div>
+{% endblock %}

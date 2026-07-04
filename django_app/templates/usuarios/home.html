@@ -117,8 +117,10 @@
 
         {% if inscricao and inscricao.enviada_em %}
             <a href="{% url 'inscricao_confirmacao' %}" class="home-cta secondary">Ver minha inscri&ccedil;&atilde;o</a>
-        {% else %}
+        {% elif inscricoes_abertas %}
             <a href="{% url 'inscricao' %}" class="home-cta">Fazer inscri&ccedil;&atilde;o</a>
+        {% else %}
+            <span class="home-cta secondary" style="cursor:default">Inscri&ccedil;&otilde;es temporariamente suspensas</span>
         {% endif %}
     </div>
 </div>

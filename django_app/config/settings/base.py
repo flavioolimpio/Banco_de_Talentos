@@ -22,6 +22,10 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS")
 
+# Liga/desliga o formulário de inscrição sem novo deploy: basta editar o
+# .env na VM (INSCRICOES_ABERTAS=False) e reiniciar o serviço.
+INSCRICOES_ABERTAS = env.bool("INSCRICOES_ABERTAS", default=True)
+
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -63,6 +67,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "apps.inscricoes.context_processors.inscricoes_abertas",
             ],
         },
     },
