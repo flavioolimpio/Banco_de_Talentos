@@ -8,12 +8,14 @@
 # ⚠️ DADOS PESSOAIS — NUNCA COMMITAR (LGPD)
 data/
 media/
+Lattes/
 *.db
 *.sqlite3
 *.csv
 *.xlsx
 *.pdf
 indicacoes-quadros-2026/
+convocacao-aviso-proppg-01-2026/
 
 # Segredos
 .env
