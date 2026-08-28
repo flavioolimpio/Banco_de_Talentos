@@ -112,7 +112,8 @@ class NovaSenhaForm(SetPasswordForm):
 
 
 class MeuCadastroForm(forms.ModelForm):
-    servidor_ativo = forms.BooleanField(required=False)
+    servidor_ativo = forms.BooleanField(required=False, label="servidor(a) ativo(a)")
+    nao_afastado_licenciado = forms.BooleanField(required=False, label="não afastado(a)/licenciado(a)")
 
     class Meta:
         model = Usuario

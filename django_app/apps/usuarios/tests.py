@@ -357,3 +357,23 @@ class MeuCadastroFormPerfilTest(TestCase):
             instance=self.externo,
         )
         self.assertFalse(form.is_valid())
+
+    def test_form_aceita_nao_afastado_licenciado_como_verdadeiro(self):
+        """Testa que checkbox 'nao_afastado_licenciado' com valor "on" é convertido para True."""
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(
+            {"nome_completo": "X", "nao_afastado_licenciado": "on"},
+            instance=self.servidor_ativo,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertTrue(form.cleaned_data["nao_afastado_licenciado"])
+
+    def test_form_nao_afastado_licenciado_opcional_para_servidor_inativo(self):
+        """Campo 'nao_afastado_licenciado' é opcional e valida sem ser preenchido."""
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(
+            {"nome_completo": "X", "servidor_ativo": ""},
+            instance=self.servidor_ativo,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertFalse(form.cleaned_data["nao_afastado_licenciado"])
