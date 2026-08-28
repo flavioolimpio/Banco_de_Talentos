@@ -8,6 +8,7 @@ from django.views.decorators.http import require_http_methods
 
 from apps.auditoria.models import AuditAction, AuditLog
 from apps.usuarios.forms import CadastroUsuarioForm, LoginForm, MeuCadastroForm, NovaSenhaForm, RecuperacaoSenhaForm
+from apps.usuarios.models import Vinculo
 
 
 LGPD_TERMO_VERSAO_ATUAL = "2026-05-14"
@@ -94,7 +95,13 @@ _ABAS_CAMPOS = {
     ],
     "endereco": ["cep", "endereco", "numero", "complemento", "bairro", "cidade", "uf"],
     "formacao": ["nivel_formacao", "area_atuacao", "lattes", "linkedin", "instituicao"],
+    "perfil": [
+        "categoria_pretendida", "servidor_ativo", "maior_titulacao",
+        "disponibilidade_semanal", "nao_afastado_licenciado",
+    ],
 }
+
+_DECLARACOES_PERFIL = ["ciencia_credenciamento", "declaracao_veracidade", "consentimento_verificacao_bases"]
 
 
 @login_required
@@ -103,13 +110,21 @@ def meu_cadastro_view(request):
     aba = request.GET.get("aba", "dados")
     if aba not in _ABAS_CAMPOS:
         aba = "dados"
-    campos_aba = _ABAS_CAMPOS[aba]
+    campos_aba = list(_ABAS_CAMPOS[aba])
+    if aba == "perfil" and request.user.vinculo != Vinculo.SERVIDOR:
+        campos_aba = [c for c in campos_aba if c not in ("servidor_ativo", "nao_afastado_licenciado")]
 
     form = MeuCadastroForm(request.POST or None, instance=request.user)
 
     if request.method == "POST" and form.is_valid():
         instance = form.save(commit=False)
-        instance.save(update_fields=campos_aba)
+        update_fields = list(campos_aba)
+        if aba == "perfil":
+            for campo in _DECLARACOES_PERFIL:
+                if request.POST.get(campo) == "on":
+                    instance.confirmar_declaracao(campo)
+                    update_fields += [campo, f"{campo}_em"]
+        instance.save(update_fields=update_fields)
         audit(request, AuditAction.CADASTRO_ATUALIZADO, alvo=request.user, detalhes={"aba": aba})
         messages.success(request, "Dados atualizados com sucesso.")
         return redirect(f"{reverse('meu_cadastro')}?aba={aba}")

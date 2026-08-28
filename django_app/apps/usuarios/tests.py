@@ -377,3 +377,74 @@ class MeuCadastroFormPerfilTest(TestCase):
         )
         self.assertTrue(form.is_valid(), form.errors)
         self.assertFalse(form.cleaned_data["nao_afastado_licenciado"])
+
+
+class MeuCadastroPerfilViewTest(TestCase):
+    def setUp(self):
+        self.servidor = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="viewservidor@test.com",
+            nome_completo="Servidor View",
+            vinculo=Vinculo.SERVIDOR,
+            password="senha123",
+        )
+        self.externo = Usuario.objects.create_user(
+            cpf="52998224725",
+            email="viewexterno@test.com",
+            nome_completo="Externo View",
+            vinculo=Vinculo.COLABORADOR_EXTERNO,
+            password="senha123",
+        )
+
+    def test_get_aba_perfil_para_servidor_mostra_campo_servidor_ativo(self):
+        self.client.force_login(self.servidor)
+        response = self.client.get(reverse("meu_cadastro") + "?aba=perfil")
+        self.assertContains(response, "name=\"servidor_ativo\"")
+
+    def test_get_aba_perfil_para_externo_esconde_campo_servidor_ativo(self):
+        self.client.force_login(self.externo)
+        response = self.client.get(reverse("meu_cadastro") + "?aba=perfil")
+        self.assertNotContains(response, "name=\"servidor_ativo\"")
+
+    def test_post_perfil_salva_categoria_e_titulacao(self):
+        self.client.force_login(self.externo)
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=perfil",
+            {"nome_completo": "X", "categoria_pretendida": "pesquisador", "maior_titulacao": "doutorado", "disponibilidade_semanal": "20"},
+        )
+        self.externo.refresh_from_db()
+        self.assertEqual(self.externo.categoria_pretendida, "pesquisador")
+        self.assertEqual(self.externo.maior_titulacao, "doutorado")
+
+    def test_post_perfil_grava_declaracao_com_timestamp(self):
+        self.client.force_login(self.externo)
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=perfil",
+            {"nome_completo": "X", "declaracao_veracidade": "on"},
+        )
+        self.externo.refresh_from_db()
+        self.assertTrue(self.externo.declaracao_veracidade)
+        self.assertIsNotNone(self.externo.declaracao_veracidade_em)
+
+    def test_post_perfil_nao_desmarca_declaracao_ja_confirmada(self):
+        self.externo.confirmar_declaracao("declaracao_veracidade")
+        self.externo.save(update_fields=["declaracao_veracidade", "declaracao_veracidade_em"])
+        primeira_data = self.externo.declaracao_veracidade_em
+        self.client.force_login(self.externo)
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=perfil",
+            {"nome_completo": "X"},
+        )
+        self.externo.refresh_from_db()
+        self.assertTrue(self.externo.declaracao_veracidade)
+        self.assertEqual(self.externo.declaracao_veracidade_em, primeira_data)
+
+    def test_post_perfil_servidor_nao_persiste_servidor_ativo_de_externo(self):
+        """Colaborador externo postando a aba perfil não grava servidor_ativo (nem existe no form pra ele)."""
+        self.client.force_login(self.externo)
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=perfil",
+            {"nome_completo": "X", "servidor_ativo": "on"},
+        )
+        self.externo.refresh_from_db()
+        self.assertIsNone(self.externo.servidor_ativo)
