@@ -328,7 +328,7 @@ class MeuCadastroFormPerfilTest(TestCase):
     def test_form_aceita_disponibilidade_dentro_da_faixa_servidor_ativo(self):
         from apps.usuarios.forms import MeuCadastroForm
         form = MeuCadastroForm(
-            {"nome_completo": "X", "servidor_ativo": "on", "disponibilidade_semanal": "20"},
+            {"nome_completo": "X", "servidor_ativo": "true", "disponibilidade_semanal": "20"},
             instance=self.servidor_ativo,
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -336,7 +336,7 @@ class MeuCadastroFormPerfilTest(TestCase):
     def test_form_rejeita_disponibilidade_acima_da_faixa_servidor_ativo(self):
         from apps.usuarios.forms import MeuCadastroForm
         form = MeuCadastroForm(
-            {"nome_completo": "X", "servidor_ativo": "on", "disponibilidade_semanal": "30"},
+            {"nome_completo": "X", "servidor_ativo": "true", "disponibilidade_semanal": "30"},
             instance=self.servidor_ativo,
         )
         self.assertFalse(form.is_valid())
@@ -444,10 +444,47 @@ class MeuCadastroPerfilViewTest(TestCase):
         self.client.force_login(self.externo)
         self.client.post(
             reverse("meu_cadastro") + "?aba=perfil",
-            {"nome_completo": "X", "servidor_ativo": "on"},
+            {"nome_completo": "X", "servidor_ativo": "true"},
         )
         self.externo.refresh_from_db()
         self.assertIsNone(self.externo.servidor_ativo)
+
+    def test_servidor_ativo_sem_declaracao_afastamento_mantem_perfil_incompleto(self):
+        """POST via view com servidor_ativo=true mas sem confirmar nao_afastado_licenciado: perfil continua incompleto."""
+        self.servidor.area_atuacao = "Engenharia"
+        self.servidor.save(update_fields=["area_atuacao"])
+        self.client.force_login(self.servidor)
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=perfil",
+            {
+                "nome_completo": "X",
+                "categoria_pretendida": "pesquisador",
+                "maior_titulacao": "doutorado",
+                "disponibilidade_semanal": "20",
+                "servidor_ativo": "true",
+                "ciencia_credenciamento": "on",
+                "declaracao_veracidade": "on",
+                "consentimento_verificacao_bases": "on",
+            },
+        )
+        self.servidor.refresh_from_db()
+        self.assertFalse(self.servidor.perfil_completo)
+
+    def test_servidor_ativo_mantem_teto_de_20h_via_view(self):
+        """Servidor com servidor_ativo=true postando 40h pela view continua rejeitado (teto de 20h)."""
+        self.client.force_login(self.servidor)
+        response = self.client.post(
+            reverse("meu_cadastro") + "?aba=perfil",
+            {
+                "nome_completo": "X",
+                "servidor_ativo": "true",
+                "disponibilidade_semanal": "40",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(response.context["form"], "disponibilidade_semanal", "Disponibilidade deve estar entre 5 e 20 horas semanais.")
+        self.servidor.refresh_from_db()
+        self.assertIsNone(self.servidor.disponibilidade_semanal)
 
 
 class HomeBannerPerfilTest(TestCase):

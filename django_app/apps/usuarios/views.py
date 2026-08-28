@@ -119,13 +119,18 @@ def meu_cadastro_view(request):
     if request.method == "POST" and form.is_valid():
         instance = form.save(commit=False)
         update_fields = list(campos_aba)
+        declaracoes_confirmadas = []
         if aba == "perfil":
             for campo in _DECLARACOES_PERFIL:
                 if request.POST.get(campo) == "on":
                     instance.confirmar_declaracao(campo)
                     update_fields += [campo, f"{campo}_em"]
+                    declaracoes_confirmadas.append(campo)
         instance.save(update_fields=update_fields)
-        audit(request, AuditAction.CADASTRO_ATUALIZADO, alvo=request.user, detalhes={"aba": aba})
+        detalhes = {"aba": aba}
+        if declaracoes_confirmadas:
+            detalhes["declaracoes"] = declaracoes_confirmadas
+        audit(request, AuditAction.CADASTRO_ATUALIZADO, alvo=request.user, detalhes=detalhes)
         messages.success(request, "Dados atualizados com sucesso.")
         return redirect(f"{reverse('meu_cadastro')}?aba={aba}")
 

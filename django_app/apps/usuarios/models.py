@@ -171,11 +171,11 @@ class Usuario(AbstractUser):
         ]
         if self.vinculo == Vinculo.SERVIDOR:
             campos.append(self.servidor_ativo)
-            if self.servidor_ativo:
-                campos.append(self.nao_afastado_licenciado)
         declaracoes = [
             self.ciencia_credenciamento,
             self.declaracao_veracidade,
             self.consentimento_verificacao_bases,
         ]
+        if self.vinculo == Vinculo.SERVIDOR and self.servidor_ativo:
+            declaracoes.append(self.nao_afastado_licenciado)
         return all(c not in (None, "") for c in campos) and all(declaracoes)

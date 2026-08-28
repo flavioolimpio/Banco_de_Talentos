@@ -81,8 +81,9 @@ def perfil_completo(self) -> bool:
     ]
     if self.vinculo == Vinculo.SERVIDOR:
         campos.append(self.servidor_ativo)
-        if self.servidor_ativo:
-            campos.append(self.nao_afastado_licenciado)
+    if self.vinculo == Vinculo.SERVIDOR and self.servidor_ativo:
+        # nao_afastado_licenciado é uma declaração (precisa ser True, não só not-None)
+        return all(c not in (None, "") for c in campos) and self.nao_afastado_licenciado is True
     return all(c not in (None, "") for c in campos)
 ```
 
