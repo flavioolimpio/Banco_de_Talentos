@@ -238,3 +238,71 @@ class MeuCadastroViewTest(TestCase):
                 acao=AuditAction.CADASTRO_ATUALIZADO,
             ).exists()
         )
+
+
+from apps.usuarios.models import CategoriaPretendida, MaiorTitulacao
+
+
+class PerfilProfissionalModelTest(TestCase):
+    def setUp(self):
+        self.servidor = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="perfilservidor@test.com",
+            nome_completo="Servidor Perfil",
+            vinculo=Vinculo.SERVIDOR,
+            password="senha123",
+        )
+        self.externo = Usuario.objects.create_user(
+            cpf="52998224725",
+            email="perfilexterno@test.com",
+            nome_completo="Externo Perfil",
+            vinculo=Vinculo.COLABORADOR_EXTERNO,
+            password="senha123",
+        )
+
+    def _preencher_campos_base(self, usuario):
+        usuario.categoria_pretendida = CategoriaPretendida.PESQUISADOR
+        usuario.maior_titulacao = MaiorTitulacao.DOUTORADO
+        usuario.area_atuacao = "Engenharia"
+        usuario.disponibilidade_semanal = 20
+
+    def _confirmar_todas_declaracoes(self, usuario):
+        usuario.confirmar_declaracao("ciencia_credenciamento")
+        usuario.confirmar_declaracao("declaracao_veracidade")
+        usuario.confirmar_declaracao("consentimento_verificacao_bases")
+
+    def test_perfil_incompleto_por_padrao(self):
+        self.assertFalse(self.servidor.perfil_completo)
+        self.assertFalse(self.externo.perfil_completo)
+
+    def test_perfil_completo_para_colaborador_externo(self):
+        self._preencher_campos_base(self.externo)
+        self._confirmar_todas_declaracoes(self.externo)
+        self.assertTrue(self.externo.perfil_completo)
+
+    def test_servidor_ativo_exige_declaracao_de_nao_afastamento(self):
+        self._preencher_campos_base(self.servidor)
+        self._confirmar_todas_declaracoes(self.servidor)
+        self.servidor.servidor_ativo = True
+        self.assertFalse(self.servidor.perfil_completo)
+        self.servidor.nao_afastado_licenciado = True
+        self.assertTrue(self.servidor.perfil_completo)
+
+    def test_servidor_inativo_nao_precisa_declarar_afastamento(self):
+        self._preencher_campos_base(self.servidor)
+        self._confirmar_todas_declaracoes(self.servidor)
+        self.servidor.servidor_ativo = False
+        self.assertTrue(self.servidor.perfil_completo)
+
+    def test_confirmar_declaracao_grava_booleano_e_timestamp(self):
+        self.assertFalse(self.externo.declaracao_veracidade)
+        self.assertIsNone(self.externo.declaracao_veracidade_em)
+        self.externo.confirmar_declaracao("declaracao_veracidade")
+        self.assertTrue(self.externo.declaracao_veracidade)
+        self.assertIsNotNone(self.externo.declaracao_veracidade_em)
+
+    def test_confirmar_declaracao_nao_atualiza_timestamp_se_ja_confirmada(self):
+        self.externo.confirmar_declaracao("declaracao_veracidade")
+        primeira_data = self.externo.declaracao_veracidade_em
+        self.externo.confirmar_declaracao("declaracao_veracidade")
+        self.assertEqual(self.externo.declaracao_veracidade_em, primeira_data)

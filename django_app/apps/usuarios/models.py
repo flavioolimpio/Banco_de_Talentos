@@ -23,6 +23,19 @@ class Genero(models.TextChoices):
     NAO_INFORMADO = "nao_informado", "Prefiro não informar"
 
 
+class CategoriaPretendida(models.TextChoices):
+    PESQUISADOR = "pesquisador", "Pesquisador(a)"
+    APOIO_TECNICO = "apoio_tecnico", "Apoio técnico"
+
+
+class MaiorTitulacao(models.TextChoices):
+    TECNICO = "tecnico", "Médio/Técnico"
+    GRADUACAO = "graduacao", "Graduação"
+    ESPECIALIZACAO = "especializacao", "Especialização"
+    MESTRADO = "mestrado", "Mestrado"
+    DOUTORADO = "doutorado", "Doutorado"
+
+
 class UsuarioManager(BaseUserManager):
     use_in_migrations = True
 
@@ -98,6 +111,29 @@ class Usuario(AbstractUser):
     aceite_lgpd_versao = models.CharField("versão do termo LGPD", max_length=30, blank=True)
     aceite_lgpd_ip = models.GenericIPAddressField("IP do aceite LGPD", null=True, blank=True)
 
+    categoria_pretendida = models.CharField(
+        "categoria pretendida", max_length=30, choices=CategoriaPretendida.choices, blank=True
+    )
+    servidor_ativo = models.BooleanField("servidor(a) ativo(a)", null=True, blank=True)
+    maior_titulacao = models.CharField(
+        "maior titulação", max_length=30, choices=MaiorTitulacao.choices, blank=True
+    )
+    disponibilidade_semanal = models.PositiveSmallIntegerField(
+        "disponibilidade semanal (horas)", null=True, blank=True
+    )
+    nao_afastado_licenciado = models.BooleanField(
+        "não afastado(a)/licenciado(a)", null=True, blank=True
+    )
+
+    ciencia_credenciamento = models.BooleanField("ciência de que o credenciamento não garante vaga", default=False)
+    ciencia_credenciamento_em = models.DateTimeField(null=True, blank=True)
+    declaracao_veracidade = models.BooleanField("declaração de veracidade (art. 299 CP)", default=False)
+    declaracao_veracidade_em = models.DateTimeField(null=True, blank=True)
+    consentimento_verificacao_bases = models.BooleanField(
+        "consentimento de verificação em bases internas", default=False
+    )
+    consentimento_verificacao_bases_em = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField("criado em", auto_now_add=True)
     updated_at = models.DateTimeField("atualizado em", auto_now=True)
 
@@ -119,3 +155,27 @@ class Usuario(AbstractUser):
         self.aceite_lgpd_em = timezone.now()
         self.aceite_lgpd_versao = versao
         self.aceite_lgpd_ip = ip
+
+    def confirmar_declaracao(self, campo: str) -> None:
+        if not getattr(self, campo):
+            setattr(self, campo, True)
+            setattr(self, f"{campo}_em", timezone.now())
+
+    @property
+    def perfil_completo(self) -> bool:
+        campos = [
+            self.categoria_pretendida,
+            self.maior_titulacao,
+            self.area_atuacao,
+            self.disponibilidade_semanal,
+        ]
+        if self.vinculo == Vinculo.SERVIDOR:
+            campos.append(self.servidor_ativo)
+            if self.servidor_ativo:
+                campos.append(self.nao_afastado_licenciado)
+        declaracoes = [
+            self.ciencia_credenciamento,
+            self.declaracao_veracidade,
+            self.consentimento_verificacao_bases,
+        ]
+        return all(c not in (None, "") for c in campos) and all(declaracoes)
