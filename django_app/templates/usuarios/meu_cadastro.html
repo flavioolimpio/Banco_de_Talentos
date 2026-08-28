@@ -31,6 +31,11 @@
                   {% if aba == 'formacao' %}font-weight:600;color:#168241;border-bottom:2px solid #168241;margin-bottom:-2px{% else %}color:#666{% endif %}">
             Forma&ccedil;&atilde;o
         </a>
+        <a href="?aba=perfil"
+           style="padding:10px 20px;text-decoration:none;font-size:14px;
+                  {% if aba == 'perfil' %}font-weight:600;color:#168241;border-bottom:2px solid #168241;margin-bottom:-2px{% else %}color:#666{% endif %}">
+            Perfil Profissional
+        </a>
     </div>
 
     <form method="post" action="?aba={{ aba }}" novalidate>
@@ -48,6 +53,25 @@
             </div>
             {% endif %}
         {% endfor %}
+        {% if aba == 'perfil' %}
+        <div style="margin-bottom:16px;padding:14px 16px;background:#f7f9f6;border-radius:8px">
+            <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:12px">
+                <input type="checkbox" name="ciencia_credenciamento" style="margin-top:3px"
+                       {% if request.user.ciencia_credenciamento %}checked disabled{% endif %}>
+                <span>Tenho ciência de que o credenciamento no Banco de Especialistas não garante direito a vaga.</span>
+            </label>
+            <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:12px">
+                <input type="checkbox" name="declaracao_veracidade" style="margin-top:3px"
+                       {% if request.user.declaracao_veracidade %}checked disabled{% endif %}>
+                <span>Declaro, sob as penas do art. 299 do Código Penal, que as informações prestadas são verdadeiras.</span>
+            </label>
+            <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px">
+                <input type="checkbox" name="consentimento_verificacao_bases" style="margin-top:3px"
+                       {% if request.user.consentimento_verificacao_bases %}checked disabled{% endif %}>
+                <span>Consinto com a verificação destas informações em bases internas do IFG (Lei nº 13.709/2018).</span>
+            </label>
+        </div>
+        {% endif %}
         <div style="margin-top:24px">
             <button type="submit" class="primary-button">Salvar altera&ccedil;&otilde;es</button>
         </div>
