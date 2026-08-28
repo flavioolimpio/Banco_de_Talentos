@@ -112,6 +112,8 @@ class NovaSenhaForm(SetPasswordForm):
 
 
 class MeuCadastroForm(forms.ModelForm):
+    servidor_ativo = forms.BooleanField(required=False)
+
     class Meta:
         model = Usuario
         fields = [
@@ -120,6 +122,8 @@ class MeuCadastroForm(forms.ModelForm):
             "cep", "endereco", "numero", "complemento",
             "bairro", "cidade", "uf",
             "nivel_formacao", "area_atuacao", "lattes", "linkedin", "instituicao",
+            "categoria_pretendida", "servidor_ativo", "maior_titulacao",
+            "disponibilidade_semanal", "nao_afastado_licenciado",
         ]
         widgets = {
             "data_nascimento": forms.DateInput(
@@ -136,3 +140,13 @@ class MeuCadastroForm(forms.ModelForm):
             )
         for field in self.fields.values():
             field.required = False
+
+    def clean_disponibilidade_semanal(self):
+        horas = self.cleaned_data.get("disponibilidade_semanal")
+        if horas is None:
+            return horas
+        servidor_ativo = self.instance.vinculo == Vinculo.SERVIDOR and self.cleaned_data.get("servidor_ativo")
+        maximo = 20 if servidor_ativo else 40
+        if not (5 <= horas <= maximo):
+            raise ValidationError(f"Disponibilidade deve estar entre 5 e {maximo} horas semanais.")
+        return horas

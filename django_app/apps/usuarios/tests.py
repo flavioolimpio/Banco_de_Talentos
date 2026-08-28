@@ -306,3 +306,54 @@ class PerfilProfissionalModelTest(TestCase):
         primeira_data = self.externo.declaracao_veracidade_em
         self.externo.confirmar_declaracao("declaracao_veracidade")
         self.assertEqual(self.externo.declaracao_veracidade_em, primeira_data)
+
+
+class MeuCadastroFormPerfilTest(TestCase):
+    def setUp(self):
+        self.servidor_ativo = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="formservativo@test.com",
+            nome_completo="Servidor Ativo",
+            vinculo=Vinculo.SERVIDOR,
+            password="senha123",
+        )
+        self.externo = Usuario.objects.create_user(
+            cpf="52998224725",
+            email="formexterno@test.com",
+            nome_completo="Externo Form",
+            vinculo=Vinculo.COLABORADOR_EXTERNO,
+            password="senha123",
+        )
+
+    def test_form_aceita_disponibilidade_dentro_da_faixa_servidor_ativo(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(
+            {"nome_completo": "X", "servidor_ativo": "on", "disponibilidade_semanal": "20"},
+            instance=self.servidor_ativo,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_form_rejeita_disponibilidade_acima_da_faixa_servidor_ativo(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(
+            {"nome_completo": "X", "servidor_ativo": "on", "disponibilidade_semanal": "30"},
+            instance=self.servidor_ativo,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("disponibilidade_semanal", form.errors)
+
+    def test_form_aceita_disponibilidade_ate_40h_para_colaborador_externo(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(
+            {"nome_completo": "X", "disponibilidade_semanal": "40"},
+            instance=self.externo,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_form_rejeita_disponibilidade_abaixo_de_5h(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(
+            {"nome_completo": "X", "disponibilidade_semanal": "3"},
+            instance=self.externo,
+        )
+        self.assertFalse(form.is_valid())
