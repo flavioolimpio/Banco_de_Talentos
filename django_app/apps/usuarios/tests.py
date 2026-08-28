@@ -448,3 +448,31 @@ class MeuCadastroPerfilViewTest(TestCase):
         )
         self.externo.refresh_from_db()
         self.assertIsNone(self.externo.servidor_ativo)
+
+
+class HomeBannerPerfilTest(TestCase):
+    def setUp(self):
+        self.usuario = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="bannerhome@test.com",
+            nome_completo="Banner Teste",
+            vinculo=Vinculo.COLABORADOR_EXTERNO,
+            password="senha123",
+        )
+        self.client.force_login(self.usuario)
+
+    def test_banner_aparece_quando_perfil_incompleto(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "Complete seu perfil")
+
+    def test_banner_some_quando_perfil_completo(self):
+        self.usuario.categoria_pretendida = CategoriaPretendida.PESQUISADOR
+        self.usuario.maior_titulacao = MaiorTitulacao.DOUTORADO
+        self.usuario.area_atuacao = "Engenharia"
+        self.usuario.disponibilidade_semanal = 20
+        self.usuario.confirmar_declaracao("ciencia_credenciamento")
+        self.usuario.confirmar_declaracao("declaracao_veracidade")
+        self.usuario.confirmar_declaracao("consentimento_verificacao_bases")
+        self.usuario.save()
+        response = self.client.get(reverse("home"))
+        self.assertNotContains(response, "Complete seu perfil")
