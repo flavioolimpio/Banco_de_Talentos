@@ -125,7 +125,7 @@ class MeuCadastroForm(forms.ModelForm):
             "genero", "resumo",
             "uf", "cidade",
             "nivel_formacao", "area_atuacao", "lattes", "linkedin", "instituicao",
-            "categoria_pretendida", "servidor_ativo", "maior_titulacao",
+            "categoria_pretendida", "servidor_ativo",
             "disponibilidade_semanal", "nao_afastado_licenciado",
         ]
         widgets = {

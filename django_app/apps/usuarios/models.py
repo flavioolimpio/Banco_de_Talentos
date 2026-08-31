@@ -165,7 +165,7 @@ class Usuario(AbstractUser):
     def perfil_completo(self) -> bool:
         campos = [
             self.categoria_pretendida,
-            self.maior_titulacao,
+            self.nivel_formacao,
             self.area_atuacao,
             self.disponibilidade_semanal,
         ]

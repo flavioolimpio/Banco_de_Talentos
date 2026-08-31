@@ -263,7 +263,7 @@ class PerfilProfissionalModelTest(TestCase):
 
     def _preencher_campos_base(self, usuario):
         usuario.categoria_pretendida = CategoriaPretendida.PESQUISADOR
-        usuario.maior_titulacao = MaiorTitulacao.DOUTORADO
+        usuario.nivel_formacao = "Doutorado"
         usuario.area_atuacao = "Engenharia"
         usuario.disponibilidade_semanal = 20
 
@@ -407,15 +407,19 @@ class MeuCadastroPerfilViewTest(TestCase):
         response = self.client.get(reverse("meu_cadastro") + "?aba=perfil")
         self.assertNotContains(response, "name=\"servidor_ativo\"")
 
-    def test_post_perfil_salva_categoria_e_titulacao(self):
+    def test_post_perfil_salva_categoria(self):
         self.client.force_login(self.externo)
         self.client.post(
             reverse("meu_cadastro") + "?aba=perfil",
-            {"nome_completo": "X", "categoria_pretendida": "pesquisador", "maior_titulacao": "doutorado", "disponibilidade_semanal": "20"},
+            {"nome_completo": "X", "categoria_pretendida": "pesquisador", "disponibilidade_semanal": "20"},
         )
         self.externo.refresh_from_db()
         self.assertEqual(self.externo.categoria_pretendida, "pesquisador")
-        self.assertEqual(self.externo.maior_titulacao, "doutorado")
+
+    def test_get_aba_perfil_nao_mostra_maior_titulacao(self):
+        self.client.force_login(self.externo)
+        response = self.client.get(reverse("meu_cadastro") + "?aba=perfil")
+        self.assertNotContains(response, "name=\"maior_titulacao\"")
 
     def test_post_perfil_grava_declaracao_com_timestamp(self):
         self.client.force_login(self.externo)
@@ -460,7 +464,6 @@ class MeuCadastroPerfilViewTest(TestCase):
             {
                 "nome_completo": "X",
                 "categoria_pretendida": "pesquisador",
-                "maior_titulacao": "doutorado",
                 "disponibilidade_semanal": "20",
                 "servidor_ativo": "true",
                 "ciencia_credenciamento": "on",
@@ -505,7 +508,7 @@ class HomeBannerPerfilTest(TestCase):
 
     def test_banner_some_quando_perfil_completo(self):
         self.usuario.categoria_pretendida = CategoriaPretendida.PESQUISADOR
-        self.usuario.maior_titulacao = MaiorTitulacao.DOUTORADO
+        self.usuario.nivel_formacao = "Doutorado"
         self.usuario.area_atuacao = "Engenharia"
         self.usuario.disponibilidade_semanal = 20
         self.usuario.confirmar_declaracao("ciencia_credenciamento")

@@ -96,7 +96,7 @@ _ABAS_CAMPOS = {
     "endereco": ["uf", "cidade"],
     "formacao": ["nivel_formacao", "area_atuacao", "lattes", "linkedin", "instituicao"],
     "perfil": [
-        "categoria_pretendida", "servidor_ativo", "maior_titulacao",
+        "categoria_pretendida", "servidor_ativo",
         "disponibilidade_semanal", "nao_afastado_licenciado",
     ],
 }
