@@ -112,7 +112,11 @@ class NovaSenhaForm(SetPasswordForm):
 
 
 class MeuCadastroForm(forms.ModelForm):
-    nao_afastado_licenciado = forms.BooleanField(required=False, label="não afastado(a)/licenciado(a)")
+    nao_afastado_licenciado = forms.BooleanField(
+        required=False,
+        label="não afastado(a)/licenciado(a)",
+        widget=forms.CheckboxInput(attrs={"style": "margin-top:3px;flex-shrink:0;width:16px;height:16px"}),
+    )
 
     class Meta:
         model = Usuario
