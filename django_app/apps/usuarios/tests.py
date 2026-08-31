@@ -151,7 +151,8 @@ class MeuCadastroViewTest(TestCase):
 
     def test_get_aba_endereco(self):
         response = self.client.get(reverse("meu_cadastro") + "?aba=endereco")
-        self.assertContains(response, "CEP")
+        self.assertContains(response, "UF")
+        self.assertContains(response, "Cidade")
 
     def test_get_aba_formacao(self):
         response = self.client.get(reverse("meu_cadastro") + "?aba=formacao")

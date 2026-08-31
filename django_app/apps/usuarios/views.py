@@ -91,9 +91,9 @@ def home_view(request):
 _ABAS_CAMPOS = {
     "dados": [
         "nome_completo", "telefone", "data_nascimento",
-        "rg", "orgao_emissor", "genero", "resumo",
+        "genero", "resumo",
     ],
-    "endereco": ["cep", "endereco", "numero", "complemento", "bairro", "cidade", "uf"],
+    "endereco": ["uf", "cidade"],
     "formacao": ["nivel_formacao", "area_atuacao", "lattes", "linkedin", "instituicao"],
     "perfil": [
         "categoria_pretendida", "servidor_ativo", "maior_titulacao",

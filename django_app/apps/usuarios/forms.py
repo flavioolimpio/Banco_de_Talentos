@@ -117,10 +117,9 @@ class MeuCadastroForm(forms.ModelForm):
     class Meta:
         model = Usuario
         fields = [
-            "nome_completo", "telefone", "data_nascimento", "rg",
-            "orgao_emissor", "genero", "resumo",
-            "cep", "endereco", "numero", "complemento",
-            "bairro", "cidade", "uf",
+            "nome_completo", "telefone", "data_nascimento",
+            "genero", "resumo",
+            "uf", "cidade",
             "nivel_formacao", "area_atuacao", "lattes", "linkedin", "instituicao",
             "categoria_pretendida", "servidor_ativo", "maior_titulacao",
             "disponibilidade_semanal", "nao_afastado_licenciado",
