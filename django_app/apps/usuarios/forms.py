@@ -129,6 +129,12 @@ class MeuCadastroForm(forms.ModelForm):
                 attrs={"type": "date"}, format="%Y-%m-%d"
             ),
             "resumo": forms.Textarea(attrs={"rows": 3}),
+            "linkedin": forms.TextInput(attrs={"placeholder": "https://linkedin.com/in/..."}),
+        }
+        labels = {
+            "uf": "Estado (UF)",
+            "nivel_formacao": "Nível de formação (ex.: Graduação, Mestrado, Doutorado)",
+            "area_atuacao": "Área de atuação (ex.: Engenharia Civil, Direito, Educação)",
         }
 
     def __init__(self, *args, **kwargs):
