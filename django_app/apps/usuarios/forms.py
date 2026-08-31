@@ -111,6 +111,16 @@ class NovaSenhaForm(SetPasswordForm):
     pass
 
 
+class ServidorAtivoSelect(forms.NullBooleanSelect):
+    def __init__(self, attrs=None):
+        super().__init__(attrs)
+        self.choices = (
+            ("unknown", "Selecione"),
+            ("true", "Sim"),
+            ("false", "Não"),
+        )
+
+
 class MeuCadastroForm(forms.ModelForm):
     nao_afastado_licenciado = forms.BooleanField(
         required=False,
@@ -134,6 +144,7 @@ class MeuCadastroForm(forms.ModelForm):
             ),
             "resumo": forms.Textarea(attrs={"rows": 3}),
             "linkedin": forms.TextInput(attrs={"placeholder": "https://linkedin.com/in/..."}),
+            "servidor_ativo": ServidorAtivoSelect,
         }
         labels = {
             "uf": "Estado (UF)",
