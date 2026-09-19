@@ -41,6 +41,9 @@ class SuspensaoInscricoesTest(TestCase):
 
     @override_settings(INSCRICOES_ABERTAS=False)
     def test_home_mostra_aviso_no_lugar_do_cta(self):
+        # A frase "Inscrições temporariamente suspensas" saiu: o cadastro passou
+        # a ser permanente e são as chamadas que abrem e fecham. O cartão de
+        # "nenhuma chamada aberta" ocupa o lugar do antigo CTA desabilitado.
         resp = self.client.get("/")
-        self.assertContains(resp, "temporariamente suspensas")
+        self.assertContains(resp, "Nenhuma chamada aberta no momento")
         self.assertNotContains(resp, "Fazer inscri")

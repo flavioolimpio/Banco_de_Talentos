@@ -58,9 +58,16 @@ class HomeViewTest(TestCase):
         self.assertContains(response, reverse("inscricao"))
 
 
-    def test_home_exibe_imagem_home(self):
+    def test_home_exibe_foto_do_polo(self):
         response = self.client.get(reverse("home"))
-        self.assertContains(response, "imagens/home.png")
+        self.assertContains(response, "imagens/polo.jpg")
+
+    def test_home_nao_menciona_energia(self):
+        # A home deixou de carregar o escopo antigo do Polo (energia) — decisão
+        # da gestão em 18/09/2026.
+        response = self.client.get(reverse("home"))
+        self.assertNotContains(response, "Energ")
+        self.assertNotContains(response, "energ")
 
 
 class SidebarTest(TestCase):

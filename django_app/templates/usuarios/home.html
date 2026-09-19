@@ -15,17 +15,14 @@
     border-radius: 10px;
     overflow: hidden;
 }
-.home-banner img { width: 100%; display: block; max-height: 420px; object-fit: cover; }
-.home-badge {
-    display: inline-block;
-    background: #d6f000;
-    color: #168241;
-    font-size: 12px;
-    font-weight: 700;
-    padding: 4px 12px;
-    border-radius: 20px;
-    margin-bottom: 14px;
-    letter-spacing: .3px;
+/* object-position empurra o recorte para cima: a foto do Polo tem muito chão
+   na metade de baixo, e o prédio é o que interessa. */
+.home-banner img {
+    width: 100%;
+    display: block;
+    max-height: 420px;
+    object-fit: cover;
+    object-position: center 35%;
 }
 .home-title {
     font-size: 28px;
@@ -44,13 +41,6 @@
     font-size: 13px;
     color: #6b7280;
     margin: 0 0 14px;
-}
-.home-desc {
-    font-size: 14px;
-    color: #444;
-    line-height: 1.6;
-    margin: 0 0 20px;
-    max-width: 560px;
 }
 .home-cta {
     display: inline-block;
@@ -82,10 +72,6 @@
     border-radius: 8px;
     padding: 18px 20px;
 }
-.home-card-icon {
-    font-size: 28px;
-    margin-bottom: 10px;
-}
 .home-card-title {
     font-size: 14px;
     font-weight: 700;
@@ -115,49 +101,47 @@
 
 <div class="home-hero">
     <div class="home-hero-text">
-        <span class="home-badge">&#9889; Tecnologias Energ&eacute;ticas Industriais</span>
+        {% comment %}
+        TODO: descomentar quando o arquivo do logo do CRIAR chegar (PNG com fundo
+        transparente, ~400px de largura, salvo em static/imagens/logo-criar.png).
+        Deixado comentado de propósito: referenciar um arquivo que não existe
+        mostraria uma imagem quebrada em produção.
+
+        <img src="{% static 'imagens/logo-criar.png' %}"
+             alt="CRIAR — Polo de Inovação" style="height:52px;margin-bottom:14px;display:block">
+        {% endcomment %}
         <h1 class="home-title">Banco de Especialistas</h1>
         <p class="home-subtitle">PD&amp;I e Extens&atilde;o Tecnol&oacute;gica</p>
         <p class="home-inst">Polo de Inova&ccedil;&atilde;o do IFG</p>
-        <p class="home-desc">
-            Gera&ccedil;&atilde;o de energia, efici&ecirc;ncia energ&eacute;tica, fontes renov&aacute;veis
-            e intelig&ecirc;ncia artificial aplicada ao setor energ&eacute;tico.
-        </p>
 
         {% if inscricao and inscricao.enviada_em %}
             <a href="{% url 'inscricao_confirmacao' %}" class="home-cta secondary">Ver minha inscri&ccedil;&atilde;o</a>
         {% elif inscricoes_abertas %}
             <a href="{% url 'inscricao' %}" class="home-cta">Fazer inscri&ccedil;&atilde;o</a>
-        {% else %}
-            <span class="home-cta secondary" style="cursor:default">Inscri&ccedil;&otilde;es temporariamente suspensas</span>
         {% endif %}
     </div>
 </div>
 
 <div class="home-banner">
-    <img src="{% static 'imagens/home.png' %}" alt="Banco de Especialistas IFG">
+    <img src="{% static 'imagens/polo.jpg' %}" alt="Polo de Inova&ccedil;&atilde;o do IFG">
 </div>
 
+{# O grid .home-cards é reaproveitado: quando o model de Chamada Interna       #}
+{# existir, ele passa a renderizar uma chamada aberta por cartão.              #}
+{# Por enquanto só ocupa o lugar da antiga frase "Inscrições temporariamente   #}
+{# suspensas" — por isso a condição ainda é a flag global. Enquanto o fluxo    #}
+{# antigo de inscrição estiver no ar, mostrar os dois ao mesmo tempo (o botão  #}
+{# "Fazer inscrição" e o aviso de que não há chamada) seria contraditório.     #}
+{% if not inscricoes_abertas %}
 <div class="home-cards">
-    <div class="home-card">
-        <div class="home-card-icon">&#9728;</div>
-        <p class="home-card-title">Fontes Renov&aacute;veis</p>
-        <p class="home-card-desc">Energia limpa e sustent&aacute;vel</p>
-    </div>
-    <div class="home-card">
-        <div class="home-card-icon">&#128161;</div>
-        <p class="home-card-title">Efici&ecirc;ncia Energ&eacute;tica</p>
-        <p class="home-card-desc">Otimiza&ccedil;&atilde;o e uso consciente</p>
-    </div>
-    <div class="home-card">
-        <div class="home-card-icon">&#9851;</div>
-        <p class="home-card-title">Reaproveitamento de Mat&eacute;ria-Prima</p>
-        <p class="home-card-desc">Economia circular e inova&ccedil;&atilde;o</p>
-    </div>
-    <div class="home-card">
-        <div class="home-card-icon">&#129504;</div>
-        <p class="home-card-title">Intelig&ecirc;ncia Artificial</p>
-        <p class="home-card-desc">Solu&ccedil;&otilde;es inteligentes para o setor energ&eacute;tico</p>
+    <div class="home-card" style="grid-column:1/-1">
+        <p class="home-card-title">Nenhuma chamada aberta no momento</p>
+        <p class="home-card-desc">
+            Seu cadastro no Banco de Especialistas permanece ativo. Quando uma nova
+            chamada for publicada, ela aparece aqui &mdash; e voc&ecirc; recebe um e-mail,
+            se tiver autorizado o envio em Meu Cadastro.
+        </p>
     </div>
 </div>
+{% endif %}
 {% endblock %}
