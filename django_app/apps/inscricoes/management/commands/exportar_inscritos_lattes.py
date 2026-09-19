@@ -68,6 +68,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
+            "--chamada",
+            type=int,
+            help="Limita a exportação a uma chamada (padrão: todas).",
+        )
+        parser.add_argument(
             "--saida",
             default=f"inscritos_lattes_{timezone.localdate()}.xlsx",
             help=(
@@ -78,15 +83,16 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         # PENDENTE fica de fora (rascunho não enviado); INDEFERIDA idem.
-        inscritos = list(
-            Inscricao.objects.filter(
-                status__in=[
-                    StatusInscricao.COMPLETA,
-                    StatusInscricao.EM_ANALISE,
-                    StatusInscricao.APROVADA,
-                ]
-            ).select_related("usuario")
-        )
+        enviadas = Inscricao.objects.filter(
+            status__in=[
+                StatusInscricao.COMPLETA,
+                StatusInscricao.EM_ANALISE,
+                StatusInscricao.APROVADA,
+            ]
+        ).select_related("usuario", "chamada")
+        if options["chamada"]:
+            enviadas = enviadas.filter(chamada_id=options["chamada"])
+        inscritos = list(enviadas)
 
         self.stdout.write("")
         self.stdout.write(

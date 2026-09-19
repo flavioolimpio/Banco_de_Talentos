@@ -1,8 +1,17 @@
 # apps/inscricoes/management/commands/recalcular_totais_servidores.py
 # Banco de Talentos — Polo de Inovação IFG
-# Recalcula os totais de todas as inscrições de servidores com a fórmula:
+#
+# Recalcula os totais das inscrições de servidor do CREDENCIAMENTO ANTIGO, com
+# a fórmula daquele quadro fixo:
 #   total = (min(manual, 100) + min(IFGProduz, 100)) / 2
 # Para inscrições sem item IFGProduz armazenado, tenta buscar da API.
+#
+# Só age sobre as chamadas de legado. No fluxo por Chamada Interna essa
+# fórmula não existe mais: o total é a soma dos critérios da chamada,
+# calculada por CriterioEdital.pontuar() a cada envio e a cada revisão do RH —
+# não há o que recalcular em lote.
+#
+# É uma ferramenta de conserto pontual do histórico, não parte da operação.
 
 from decimal import Decimal
 
@@ -14,11 +23,16 @@ from apps.usuarios.models import Vinculo
 
 
 class Command(BaseCommand):
-    help = "Recalcula totais de inscrições de servidores: (IFGProduz + critérios) / 2"
+    help = (
+        "Recalcula totais das inscrições de servidor do credenciamento antigo "
+        "(chamadas de legado): (IFGProduz + critérios) / 2."
+    )
 
     def handle(self, *args, **options):
         inscricoes = (
-            Inscricao.objects.filter(modalidade=Vinculo.SERVIDOR)
+            Inscricao.objects.filter(
+                modalidade=Vinculo.SERVIDOR, chamada__legado=True
+            )
             .select_related("usuario")
             .prefetch_related("itens__criterio")
         )

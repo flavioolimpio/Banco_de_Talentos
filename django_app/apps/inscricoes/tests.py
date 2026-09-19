@@ -4,6 +4,7 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
@@ -61,75 +62,79 @@ class QuadrosInscricaoTest(TestCase):
 
 
 class PopularCriteriosCommandTest(TestCase):
-    # Atenção: o banco de teste já nasce com os critérios criados pelas data
-    # migrations (0004, 0006, 0007) e com as desativações das migrations 0008
-    # e 0009. O `popular_criterios` é idempotente e, hoje, não cria nada novo —
-    # ele existe para repovoar a partir de quadros.py quando necessário.
-    # Por isso os totais abaixo são do banco migrado, não do tamanho do dict.
-    TOTAL_APOS_MIGRATIONS = 39
+    """O comando virou "copiar um quadro modelo para dentro de uma chamada".
 
-    def test_cria_criterios_servidor(self):
-        call_command("popular_criterios", verbosity=0)
+    Desde a Retificação 4 não existe quadro fixo por modalidade: cada chamada
+    tem o seu (item 5.1, VI). `quadros.py` deixou de ser a verdade e passou a
+    ser uma biblioteca de modelos, para o coordenador não começar do zero.
+    """
+
+    def setUp(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.inscricoes.models import ChamadaInterna
+
+        agora = timezone.now()
+        self.chamada = ChamadaInterna.objects.create(
+            numero=1, ano=2027, titulo="Nova chamada",
+            abertura=agora, encerramento=agora + timedelta(days=7),
+        )
+
+    def test_sem_chamada_recusa(self):
+        # Sem isso o comando tentava criar critério sem chamada e estourava com
+        # IntegrityError no meio da execução.
+        with self.assertRaises(CommandError):
+            call_command("popular_criterios", verbosity=0)
+
+    def test_chamada_inexistente_recusa(self):
+        with self.assertRaises(CommandError):
+            call_command("popular_criterios", chamada=99999, verbosity=0)
+
+    def test_chamada_de_legado_recusa(self):
+        legado = chamada_de_teste()
+        with self.assertRaises(CommandError):
+            call_command("popular_criterios", chamada=legado.pk, verbosity=0)
+
+    def test_copia_um_quadro_para_a_chamada(self):
+        call_command("popular_criterios", chamada=self.chamada.pk,
+                     quadro=["servidor"], verbosity=0)
         self.assertEqual(
-            CriterioEdital.objects.filter(modalidade="servidor", tipo_servidor="").count(),
+            CriterioEdital.objects.filter(
+                chamada=self.chamada, modalidade="servidor"
+            ).count(),
             len(QUADROS_INSCRICAO["servidor"]),
         )
 
-    def test_servidor_apoio_tecnico_sem_criterio_ativo(self):
-        # Quadro aposentado: o que sobrou no banco está com ativo=False e não
-        # pode voltar a aparecer para o candidato.
-        call_command("popular_criterios", verbosity=0)
+    def test_copia_todos_os_quadros_por_padrao(self):
+        call_command("popular_criterios", chamada=self.chamada.pk, verbosity=0)
+        esperado = sum(len(v) for v in QUADROS_INSCRICAO.values())
         self.assertEqual(
-            CriterioEdital.objects.filter(
-                modalidade="servidor", tipo_servidor="apoio_tecnico", ativo=True
-            ).count(),
-            0,
+            CriterioEdital.objects.filter(chamada=self.chamada).count(), esperado
         )
-
-    def test_cria_criterios_estudante(self):
-        call_command("popular_criterios", verbosity=0)
-        self.assertEqual(
-            CriterioEdital.objects.filter(modalidade="estudante").count(),
-            len(QUADROS_INSCRICAO["estudante"]),
-        )
-
-    def test_cria_criterios_colaborador_externo(self):
-        # Quadro I (Pesquisador) vem de quadros.py; o Quadro II (Apoio Técnico,
-        # 8 itens) existe só na migration 0007 e não é repovoado por aqui.
-        call_command("popular_criterios", verbosity=0)
-        self.assertEqual(
-            CriterioEdital.objects.filter(
-                modalidade="colaborador_externo", tipo_servidor=""
-            ).count(),
-            len(QUADROS_INSCRICAO["colaborador_externo"]),
-        )
-        self.assertEqual(
-            CriterioEdital.objects.filter(
-                modalidade="colaborador_externo", tipo_servidor="apoio_tecnico"
-            ).count(),
-            8,
-        )
-
-    def test_total_criterios(self):
-        call_command("popular_criterios", verbosity=0)
-        self.assertEqual(CriterioEdital.objects.count(), self.TOTAL_APOS_MIGRATIONS)
 
     def test_idempotente_sem_duplicar(self):
-        call_command("popular_criterios", verbosity=0)
-        call_command("popular_criterios", verbosity=0)
-        self.assertEqual(CriterioEdital.objects.count(), self.TOTAL_APOS_MIGRATIONS)
+        call_command("popular_criterios", chamada=self.chamada.pk, verbosity=0)
+        antes = CriterioEdital.objects.filter(chamada=self.chamada).count()
+        call_command("popular_criterios", chamada=self.chamada.pk, verbosity=0)
+        self.assertEqual(CriterioEdital.objects.filter(chamada=self.chamada).count(), antes)
 
-    def test_campos_salvos_corretamente(self):
-        call_command("popular_criterios", verbosity=0)
-        # tipo_servidor="" é obrigatório no filtro: existe um "ifgproduz" homônimo
-        # em servidor/apoio_tecnico, criado pela migration 0007 e desativado pela 0009.
+    def test_nao_mexe_no_quadro_de_outra_chamada(self):
+        outra = chamada_de_teste()
+        antes = CriterioEdital.objects.filter(chamada=outra).count()
+        call_command("popular_criterios", chamada=self.chamada.pk, verbosity=0)
+        self.assertEqual(CriterioEdital.objects.filter(chamada=outra).count(), antes)
+
+    def test_grava_is_api(self):
+        # Sem isso o critério do IFGProduz nasceria como campo digitável.
+        call_command("popular_criterios", chamada=self.chamada.pk,
+                     quadro=["servidor"], verbosity=0)
         criterio = CriterioEdital.objects.get(
-            modalidade="servidor", tipo_servidor="", item_id="ifgproduz"
+            chamada=self.chamada, modalidade="servidor", item_id="ifgproduz"
         )
-        self.assertEqual(criterio.criterio, "Produção Acadêmica (IFGProduz)")
-        self.assertEqual(float(criterio.maximo), 100.0)
         self.assertTrue(criterio.is_api)
-        self.assertTrue(criterio.ativo)
+        self.assertEqual(float(criterio.maximo), 100.0)
 
 
 class InscricaoAdminActionsTest(TestCase):
@@ -434,7 +439,6 @@ class InscricaoDownloadTest(TestCase):
 class SidebarInscricaoTest(TestCase):
     def setUp(self):
         from apps.usuarios.models import Usuario, Vinculo
-        from apps.inscricoes.management.commands.popular_criterios import Command
         self.user = Usuario.objects.create_user(
             cpf="52998224725",
             email="sidebar_insc@test.com",
@@ -442,7 +446,6 @@ class SidebarInscricaoTest(TestCase):
             vinculo=Vinculo.ESTUDANTE,
             password="senha123",
         )
-        Command().handle(verbosity=0)
         self.client.force_login(self.user)
 
     def test_lista_de_chamadas_tem_sidebar(self):
@@ -524,7 +527,6 @@ from django.core.management import call_command
 
 class RevisaoViewTest(TestCase):
     def setUp(self):
-        call_command("popular_criterios", verbosity=0)
         self.revisor = User.objects.create_user(
             cpf="52998224725",
             email="revisor@ifg.edu.br",
@@ -752,10 +754,12 @@ class ExportarAprovadasCommandTest(TestCase):
         self.assertEqual(primeiros_bytes, b"\xef\xbb\xbf")
 
     def test_cabecalho_correto(self):
+        # A coluna "Chamada" entrou: sem ela, um CSV com várias chamadas
+        # misturadas não diz de qual processo é cada linha.
         _, conteudo = self._exportar()
         primeira_linha = conteudo.splitlines()[0]
         self.assertEqual(
-            primeira_linha, "Nome;Modalidade;Categoria;Email;Pontuação"
+            primeira_linha, "Chamada;Nome;Modalidade;Categoria;Email;Pontuação"
         )
 
     def test_apenas_aprovadas_e_nota_validada_com_virgula(self):

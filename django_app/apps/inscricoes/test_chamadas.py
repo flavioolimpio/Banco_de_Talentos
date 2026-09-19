@@ -6,6 +6,8 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
@@ -475,3 +477,69 @@ class RevisaoLegadoTest(TestCase):
                                     f"validado_{self.item.pk}": "45"})
         self.inscricao.refresh_from_db()
         self.assertEqual(self.inscricao.total_validado, Decimal("45"))
+
+
+class ExportarConvocadosTest(BaseChamada):
+    """A convocação é sempre por chamada — nunca todas misturadas."""
+
+    def setUp(self):
+        super().setUp()
+        self._post()
+        self.inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
+        self.inscricao.status = StatusInscricao.APROVADA
+        self.inscricao.total_validado = Decimal("180")
+        self.inscricao.save(update_fields=["status", "total_validado"])
+
+    def _exportar(self, **kwargs):
+        import tempfile
+        from pathlib import Path
+
+        from openpyxl import load_workbook
+
+        destino = Path(tempfile.mkdtemp()) / "convocados.xlsx"
+        call_command("exportar_convocados", saida=str(destino), verbosity=0, **kwargs)
+        if not destino.exists():
+            return None
+        return list(load_workbook(destino).active.iter_rows(values_only=True))
+
+    def test_exige_chamada(self):
+        with self.assertRaises(CommandError):
+            call_command("exportar_convocados", verbosity=0)
+
+    def test_chamada_inexistente_recusa(self):
+        with self.assertRaises(CommandError):
+            call_command("exportar_convocados", chamada=99999, verbosity=0)
+
+    def test_traz_somente_a_chamada_pedida(self):
+        outra = ChamadaInterna.objects.create(
+            numero=9, ano=2027, titulo="Outra",
+            abertura=timezone.now(), encerramento=timezone.now() + timedelta(days=1),
+        )
+        outro_usuario = Usuario.objects.create_user(
+            cpf="11144477735", email="outro@test.com", nome_completo="Outro Aprovado",
+            vinculo=Vinculo.ESTUDANTE, password="senha123",
+        )
+        Inscricao.objects.create(
+            usuario=outro_usuario, chamada=outra, modalidade=Vinculo.ESTUDANTE,
+            status=StatusInscricao.APROVADA, total_validado=Decimal("999"),
+        )
+        linhas = self._exportar(chamada=self.chamada.pk)
+        nomes = [linha[0] for linha in linhas[1:]]
+        self.assertIn("Candidata Teste", nomes)
+        self.assertNotIn("Outro Aprovado", nomes)
+
+    def test_sem_aprovados_nao_gera_arquivo(self):
+        self.inscricao.status = StatusInscricao.EM_ANALISE
+        self.inscricao.save(update_fields=["status"])
+        self.assertIsNone(self._exportar(chamada=self.chamada.pk))
+
+    def test_filtro_por_vaga(self):
+        self.assertIsNone(self._exportar(chamada=self.chamada.pk, vaga="XX-99"))
+
+    def test_registra_auditlog(self):
+        from apps.auditoria.models import AuditAction, AuditLog
+
+        self._exportar(chamada=self.chamada.pk)
+        log = AuditLog.objects.filter(acao=AuditAction.CSV_EXPORTADO).latest("id")
+        self.assertEqual(log.detalhes["comando"], "exportar_convocados")
+        self.assertEqual(log.detalhes["chamada"], self.chamada.pk)

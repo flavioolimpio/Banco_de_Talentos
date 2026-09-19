@@ -16,10 +16,10 @@
 import re
 import zipfile
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from apps.inscricoes.models import Inscricao, StatusInscricao
+from apps.inscricoes.models import ChamadaInterna, Inscricao, StatusInscricao
 
 
 def _slug_nome(nome: str) -> str:
@@ -35,6 +35,12 @@ class Command(BaseCommand):
     )
 
     def add_arguments(self, parser):
+        # --chamada é obrigatório: um zip com os comprovantes de TODAS as
+        # chamadas misturadas não corresponde a nenhum processo real, e
+        # espalha PDF de candidato mais do que o necessário.
+        parser.add_argument(
+            "--chamada", type=int, help="ID da chamada interna (obrigatório)."
+        )
         parser.add_argument(
             "--saida",
             default=f"pdfs_aprovados_{timezone.localdate()}.zip",
@@ -45,8 +51,19 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if not options["chamada"]:
+            raise CommandError(
+                "Informe --chamada <id>. Use "
+                "`python manage.py exportar_convocados --listar-chamadas` "
+                "para ver os IDs."
+            )
+        try:
+            chamada = ChamadaInterna.objects.get(pk=options["chamada"])
+        except ChamadaInterna.DoesNotExist:
+            raise CommandError(f"Não existe chamada com id {options['chamada']}.")
+
         aprovadas = (
-            Inscricao.objects.filter(status=StatusInscricao.APROVADA)
+            Inscricao.objects.filter(chamada=chamada, status=StatusInscricao.APROVADA)
             .exclude(comprovantes_pdf="")
             .select_related("usuario")
             .order_by("modalidade", "-total_validado")
