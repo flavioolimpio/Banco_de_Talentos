@@ -37,7 +37,7 @@
         {% csrf_token %}
         {{ form.non_field_errors }}
         {% for field in form %}
-            {% if field.html_name in campos_aba and field.html_name != "nao_afastado_licenciado" and field.html_name != "aceite_comunicacoes" %}
+            {% if field.html_name in campos_aba and field.html_name != "nao_afastado_licenciado" %}
             {% if field.field.widget.input_type == "checkbox" %}
             <div style="margin-bottom:16px;padding:12px 16px;background:#f7f9f6;border-radius:8px">
                 <label for="{{ field.id_for_label }}"
@@ -64,22 +64,6 @@
         {% endfor %}
         {% if aba == 'perfil' %}
         <div style="margin-bottom:16px">
-            <div style="font-weight:600;font-size:14px;color:#202124;margin-bottom:10px">Comunica&ccedil;&otilde;es</div>
-            {# Ao contrário das declarações abaixo, este consentimento é         #}
-            {# revogável a qualquer tempo (LGPD, art. 8º, §5º): o checkbox nunca #}
-            {# fica "disabled" e pode ser desmarcado.                            #}
-            <label for="{{ form.aceite_comunicacoes.id_for_label }}"
-                   style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;
-                          background:#f7f9f6;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer">
-                {{ form.aceite_comunicacoes }}
-                <span style="text-align:justify;font-size:13px;line-height:1.6;color:#333">
-                    Aceito receber e-mail com a divulga&ccedil;&atilde;o de novas vagas do Polo de
-                    Inova&ccedil;&atilde;o. Voc&ecirc; pode desmarcar esta op&ccedil;&atilde;o quando quiser.
-                </span>
-            </label>
-            {{ form.aceite_comunicacoes.errors }}
-        </div>
-        <div style="margin-bottom:16px">
             <div style="font-weight:600;font-size:14px;color:#202124;margin-bottom:10px">Declarações</div>
             {% if "nao_afastado_licenciado" in campos_aba %}
             <label for="{{ form.nao_afastado_licenciado.id_for_label }}"
@@ -94,6 +78,12 @@
                 <input type="checkbox" name="ciencia_credenciamento" style="margin-top:3px;flex-shrink:0;width:16px;height:16px"
                        {% if request.user.ciencia_credenciamento %}checked disabled{% endif %}>
                 <span style="text-align:justify;font-size:13px;line-height:1.6;color:#333">Tenho ciência de que o credenciamento no Banco de Especialistas não garante direito a vaga.</span>
+            </label>
+            <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;margin-bottom:8px;
+                          background:#f7f9f6;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer">
+                <input type="checkbox" name="ciencia_comunicacoes" style="margin-top:3px;flex-shrink:0;width:16px;height:16px"
+                       {% if request.user.ciencia_comunicacoes %}checked disabled{% endif %}>
+                <span style="text-align:justify;font-size:13px;line-height:1.6;color:#333">Tenho ciência de que receberei, no e-mail informado neste cadastro, a divulgação das vagas abertas pelo Polo de Inovação. É minha responsabilidade manter o endereço atualizado (item 5.2.4 do Edital).</span>
             </label>
             <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;margin-bottom:8px;
                           background:#f7f9f6;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer">

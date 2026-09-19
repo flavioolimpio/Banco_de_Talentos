@@ -105,11 +105,15 @@ _ABAS_CAMPOS = {
     ],
     "perfil": [
         "disponibilidade_semanal", "nao_afastado_licenciado",
-        "aceite_comunicacoes",
     ],
 }
 
-_DECLARACOES_PERFIL = ["ciencia_credenciamento", "declaracao_veracidade", "consentimento_verificacao_bases"]
+_DECLARACOES_PERFIL = [
+    "ciencia_credenciamento",
+    "ciencia_comunicacoes",
+    "declaracao_veracidade",
+    "consentimento_verificacao_bases",
+]
 
 
 @login_required
@@ -126,7 +130,6 @@ def meu_cadastro_view(request):
     # limpos dentro de form.instance — e form.instance É o request.user. Lido
     # depois, o "valor anterior" já seria o novo, e o log não serviria de nada.
     email_anterior = request.user.email
-    aceite_comunicacoes_anterior = request.user.aceite_comunicacoes
 
     form = MeuCadastroForm(request.POST or None, instance=request.user)
 
@@ -140,11 +143,6 @@ def meu_cadastro_view(request):
                     instance.confirmar_declaracao(campo)
                     update_fields += [campo, f"{campo}_em"]
                     declaracoes_confirmadas.append(campo)
-            # Consentimento de comunicação é revogável (LGPD, art. 8º, §5º):
-            # carimba a data toda vez que o valor MUDA, nos dois sentidos.
-            if instance.aceite_comunicacoes != aceite_comunicacoes_anterior:
-                instance.aceite_comunicacoes_em = timezone.now()
-                update_fields.append("aceite_comunicacoes_em")
         instance.save(update_fields=update_fields)
         detalhes = {"aba": aba}
         if declaracoes_confirmadas:
@@ -155,8 +153,6 @@ def meu_cadastro_view(request):
         if instance.email != email_anterior:
             detalhes["email_anterior"] = email_anterior
             detalhes["email_novo"] = instance.email
-        if instance.aceite_comunicacoes != aceite_comunicacoes_anterior:
-            detalhes["aceite_comunicacoes"] = instance.aceite_comunicacoes
         audit(request, AuditAction.CADASTRO_ATUALIZADO, alvo=request.user, detalhes=detalhes)
         messages.success(request, "Dados atualizados com sucesso.")
         return redirect(f"{reverse('meu_cadastro')}?aba={aba}")

@@ -543,3 +543,86 @@ class ExportarConvocadosTest(BaseChamada):
         log = AuditLog.objects.filter(acao=AuditAction.CSV_EXPORTADO).latest("id")
         self.assertEqual(log.detalhes["comando"], "exportar_convocados")
         self.assertEqual(log.detalhes["chamada"], self.chamada.pk)
+
+
+class EmailsChamadaTest(BaseChamada):
+    """Lista de divulgação: só quem pode se inscrever é avisado.
+
+    Avisar quem não tem vaga na chamada foi a reclamação que originou toda
+    esta mudança — item 5.2.2 do Edital combinado com as vagas de fato
+    ofertadas.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # A chamada base só tem vaga de ESTUDANTE.
+        self.servidor = Usuario.objects.create_user(
+            cpf="11144477735", email="servidor@test.com", nome_completo="Servidor",
+            vinculo=Vinculo.SERVIDOR, password="senha123",
+        )
+        self.inativo = Usuario.objects.create_user(
+            cpf="15350946056", email="inativo@test.com", nome_completo="Inativo",
+            vinculo=Vinculo.ESTUDANTE, password="senha123", is_active=False,
+        )
+
+    def _gerar(self, **kwargs):
+        import tempfile
+        from pathlib import Path
+
+        destino = Path(tempfile.mkdtemp()) / "aviso.txt"
+        call_command("emails_chamada", saida=str(destino), verbosity=0, **kwargs)
+        return destino.read_text(encoding="utf-8") if destino.exists() else None
+
+    def test_exige_chamada(self):
+        with self.assertRaises(CommandError):
+            call_command("emails_chamada", verbosity=0)
+
+    def test_so_avisa_quem_tem_vaga_no_seu_vinculo(self):
+        conteudo = self._gerar(chamada=self.chamada.pk)
+        self.assertIn("candidato@test.com", conteudo)      # estudante
+        self.assertNotIn("servidor@test.com", conteudo)    # sem vaga de servidor
+
+    def test_inativo_fica_de_fora(self):
+        conteudo = self._gerar(chamada=self.chamada.pk)
+        self.assertNotIn("inativo@test.com", conteudo)
+
+    def test_publico_muda_com_as_vagas(self):
+        Vaga.objects.create(
+            chamada=self.chamada, codigo="Pq 99", funcao="Pesquisador(a)",
+            modalidade=Vinculo.SERVIDOR, quantidade=1,
+        )
+        conteudo = self._gerar(chamada=self.chamada.pk)
+        self.assertIn("servidor@test.com", conteudo)
+        self.assertIn("servidores(as) do IFG", conteudo)
+        self.assertIn("estudantes do IFG", conteudo)
+
+    def test_texto_traz_prazo_vagas_e_ressalvas(self):
+        conteudo = self._gerar(chamada=self.chamada.pk)
+        self.assertIn("Chamada Interna nº 01/2027", conteudo)
+        self.assertIn("Rota do Pescado", conteudo)
+        self.assertIn("Pq 12", conteudo)
+        self.assertIn(self.chamada.encerramento.strftime("%d/%m/%Y"), conteudo)
+        # ressalvas dos itens 5.16 e 5.2.2
+        self.assertIn("não gera nenhum prejuízo", conteudo)
+        self.assertIn("aviso complementar", conteudo)
+
+    def test_emails_saem_colados_para_o_cco(self):
+        conteudo = self._gerar(chamada=self.chamada.pk)
+        primeira_linha = conteudo.splitlines()[0]
+        self.assertIn("@", primeira_linha)
+        self.assertNotIn("Assunto", primeira_linha)
+
+    def test_chamada_sem_vagas_nao_gera_arquivo(self):
+        vazia = ChamadaInterna.objects.create(
+            numero=8, ano=2027, titulo="Sem vagas",
+            abertura=timezone.now(), encerramento=timezone.now() + timedelta(days=1),
+        )
+        self.assertIsNone(self._gerar(chamada=vazia.pk))
+
+    def test_registra_auditlog(self):
+        from apps.auditoria.models import AuditAction, AuditLog
+
+        self._gerar(chamada=self.chamada.pk)
+        log = AuditLog.objects.filter(acao=AuditAction.CSV_EXPORTADO).latest("id")
+        self.assertEqual(log.detalhes["comando"], "emails_chamada")
+        self.assertEqual(log.detalhes["chamada"], self.chamada.pk)

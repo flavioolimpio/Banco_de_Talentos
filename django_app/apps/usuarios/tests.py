@@ -363,6 +363,7 @@ class PerfilProfissionalModelTest(TestCase):
 
     def _confirmar_todas_declaracoes(self, usuario):
         usuario.confirmar_declaracao("ciencia_credenciamento")
+        usuario.confirmar_declaracao("ciencia_comunicacoes")
         usuario.confirmar_declaracao("declaracao_veracidade")
         usuario.confirmar_declaracao("consentimento_verificacao_bases")
 
@@ -613,6 +614,7 @@ class HomeBannerPerfilTest(TestCase):
         self.usuario.cnpq_area = "3.04"
         self.usuario.disponibilidade_semanal = 20
         self.usuario.confirmar_declaracao("ciencia_credenciamento")
+        self.usuario.confirmar_declaracao("ciencia_comunicacoes")
         self.usuario.confirmar_declaracao("declaracao_veracidade")
         self.usuario.confirmar_declaracao("consentimento_verificacao_bases")
         self.usuario.save()
@@ -620,12 +622,14 @@ class HomeBannerPerfilTest(TestCase):
         self.assertNotContains(response, "Complete seu perfil")
 
 
-class AceiteComunicacoesTest(TestCase):
-    """Consentimento de receber e-mail sobre novas chamadas.
+class CienciaComunicacoesTest(TestCase):
+    """Ciência de que receberá a divulgação de vagas.
 
-    Ao contrário das declarações (veracidade, ciência, LGPD), este é
-    REVOGÁVEL a qualquer tempo — LGPD, art. 8º, §5º. Por isso não passa por
-    confirmar_declaracao(), que é de via única.
+    NÃO é consentimento: avisar quem está no Banco a cada chamada é obrigação
+    do Polo (item 5.2.2 do Edital), e ser avisado de vagas é o motivo de
+    existir do cadastro. Segue o mesmo padrão de via única das demais
+    declarações — marcou, fica marcado. Quem não quiser mais receber pede
+    descredenciamento (item 7.1).
     """
 
     def setUp(self):
@@ -643,35 +647,44 @@ class AceiteComunicacoesTest(TestCase):
         dados.update(extra)
         return self.client.post(reverse("meu_cadastro") + "?aba=perfil", dados)
 
-    def test_comeca_desmarcado(self):
-        self.assertFalse(self.usuario.aceite_comunicacoes)
-        self.assertIsNone(self.usuario.aceite_comunicacoes_em)
+    def test_comeca_desmarcada(self):
+        self.assertFalse(self.usuario.ciencia_comunicacoes)
+        self.assertIsNone(self.usuario.ciencia_comunicacoes_em)
 
     def test_marcar_grava_timestamp(self):
-        self._post_perfil(aceite_comunicacoes="on")
+        self._post_perfil(ciencia_comunicacoes="on")
         self.usuario.refresh_from_db()
-        self.assertTrue(self.usuario.aceite_comunicacoes)
-        self.assertIsNotNone(self.usuario.aceite_comunicacoes_em)
+        self.assertTrue(self.usuario.ciencia_comunicacoes)
+        self.assertIsNotNone(self.usuario.ciencia_comunicacoes_em)
 
-    def test_pode_ser_revogado(self):
-        self._post_perfil(aceite_comunicacoes="on")
+    def test_nao_desmarca_depois_de_confirmada(self):
+        self._post_perfil(ciencia_comunicacoes="on")
         self.usuario.refresh_from_db()
-        marcado_em = self.usuario.aceite_comunicacoes_em
+        primeira_data = self.usuario.ciencia_comunicacoes_em
 
-        self._post_perfil()  # checkbox ausente = desmarcado
+        self._post_perfil()  # sem o checkbox
         self.usuario.refresh_from_db()
-        self.assertFalse(self.usuario.aceite_comunicacoes)
-        # a revogação também é datada — não fica com a data da concessão
-        self.assertNotEqual(self.usuario.aceite_comunicacoes_em, marcado_em)
+        self.assertTrue(self.usuario.ciencia_comunicacoes)
+        self.assertEqual(self.usuario.ciencia_comunicacoes_em, primeira_data)
 
-    def test_salvar_sem_mudar_nao_redata(self):
-        self._post_perfil(aceite_comunicacoes="on")
-        self.usuario.refresh_from_db()
-        primeira_data = self.usuario.aceite_comunicacoes_em
+    def test_aparece_no_bloco_de_declaracoes(self):
+        resposta = self.client.get(reverse("meu_cadastro") + "?aba=perfil")
+        self.assertContains(resposta, 'name="ciencia_comunicacoes"')
+        self.assertContains(resposta, "receberei")
 
-        self._post_perfil(aceite_comunicacoes="on")
-        self.usuario.refresh_from_db()
-        self.assertEqual(self.usuario.aceite_comunicacoes_em, primeira_data)
+    def test_entra_no_perfil_completo(self):
+        from apps.usuarios.models import CategoriaPretendida, MaiorTitulacao
+
+        self.usuario.categoria_pretendida = CategoriaPretendida.PESQUISADOR
+        self.usuario.maior_titulacao = MaiorTitulacao.DOUTORADO
+        self.usuario.cnpq_area = "3.04"
+        self.usuario.disponibilidade_semanal = 20
+        for campo in ("ciencia_credenciamento", "declaracao_veracidade",
+                      "consentimento_verificacao_bases"):
+            self.usuario.confirmar_declaracao(campo)
+        self.assertFalse(self.usuario.perfil_completo)
+        self.usuario.confirmar_declaracao("ciencia_comunicacoes")
+        self.assertTrue(self.usuario.perfil_completo)
 
 
 class GrandeAreaCnpqTest(TestCase):

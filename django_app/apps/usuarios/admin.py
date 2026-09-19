@@ -10,14 +10,14 @@ class UsuarioAdmin(UserAdmin):
     ordering = ("nome_completo",)
     list_display = (
         "cpf", "nome_completo", "email", "vinculo", "categoria_pretendida",
-        "cnpq_area", "aceite_comunicacoes", "is_active", "is_staff",
+        "cnpq_area", "ciencia_comunicacoes", "is_active", "is_staff",
     )
     # cnpq_area filtra por área; para filtrar pela grande área inteira, use a
     # busca do admin com o prefixo (ex.: "3.") — a grande área é derivada do
     # código, não tem coluna própria.
     list_filter = (
         "vinculo", "perfil", "categoria_pretendida", "maior_titulacao",
-        "cnpq_area", "aceite_comunicacoes", "is_active", "is_staff",
+        "cnpq_area", "ciencia_comunicacoes", "is_active", "is_staff",
     )
     search_fields = ("cpf", "nome_completo", "email", "cnpq_area")
     fieldsets = (
@@ -31,13 +31,13 @@ class UsuarioAdmin(UserAdmin):
         ("Permissões", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
         ("LGPD", {"fields": (
             "aceite_lgpd", "aceite_lgpd_em", "aceite_lgpd_versao", "aceite_lgpd_ip",
-            "aceite_comunicacoes", "aceite_comunicacoes_em",
+            "ciencia_comunicacoes", "ciencia_comunicacoes_em",
         )}),
         ("Datas", {"fields": ("last_login", "date_joined", "created_at", "updated_at")}),
     )
     readonly_fields = (
         "last_login", "date_joined", "created_at", "updated_at",
-        "aceite_lgpd_em", "aceite_lgpd_ip", "aceite_comunicacoes_em",
+        "aceite_lgpd_em", "aceite_lgpd_ip", "ciencia_comunicacoes_em",
     )
     add_fieldsets = (
         (

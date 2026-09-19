@@ -131,14 +131,17 @@ class Usuario(AbstractUser):
         "área do conhecimento (CNPq)", max_length=10, choices=CNPQ_AREAS, blank=True
     )
 
-    # Consentimento de receber e-mail sobre novas chamadas (Bloco F da
-    # especificação). É REVOGÁVEL a qualquer tempo — LGPD, art. 8º, §5º —, por
-    # isso é um checkbox comum e não usa confirmar_declaracao(), que é de via
-    # única. O `_em` registra tanto a concessão quanto a revogação.
-    aceite_comunicacoes = models.BooleanField(
-        "aceito receber e-mail com divulgação de vagas", default=False
+    # Ciência de que receberá e-mail com a divulgação de vagas (Bloco F da
+    # especificação). É CIÊNCIA, não consentimento: avisar quem está no Banco
+    # a cada chamada é obrigação do Polo (item 5.2.2 do Edital), e ser avisado
+    # de vagas é o próprio motivo de existir do cadastro. Por isso segue o
+    # mesmo padrão de via única das demais declarações — ver
+    # confirmar_declaracao(). Quem não quiser mais receber pede
+    # descredenciamento do Banco (item 7.1), que é a saída prevista.
+    ciencia_comunicacoes = models.BooleanField(
+        "ciência de que receberá e-mail com a divulgação de vagas", default=False
     )
-    aceite_comunicacoes_em = models.DateTimeField(null=True, blank=True)
+    ciencia_comunicacoes_em = models.DateTimeField(null=True, blank=True)
 
     ciencia_credenciamento = models.BooleanField("ciência de que o credenciamento não garante vaga", default=False)
     ciencia_credenciamento_em = models.DateTimeField(null=True, blank=True)
@@ -199,6 +202,7 @@ class Usuario(AbstractUser):
             campos.append(self.servidor_ativo)
         declaracoes = [
             self.ciencia_credenciamento,
+            self.ciencia_comunicacoes,
             self.declaracao_veracidade,
             self.consentimento_verificacao_bases,
         ]

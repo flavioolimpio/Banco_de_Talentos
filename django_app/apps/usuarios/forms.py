@@ -130,12 +130,6 @@ class MeuCadastroForm(forms.ModelForm):
         widget=forms.CheckboxInput(attrs={"style": "margin-top:3px;flex-shrink:0;width:16px;height:16px"}),
     )
 
-    aceite_comunicacoes = forms.BooleanField(
-        required=False,
-        label="Aceito receber e-mail com a divulgação de novas vagas",
-        widget=forms.CheckboxInput(attrs={"style": "margin-top:3px;flex-shrink:0;width:16px;height:16px"}),
-    )
-
     # Estado e cidade são selects encadeados. O estado tem lista fixa; a cidade
     # é preenchida em __init__ com os municípios do estado escolhido, para o
     # formulário funcionar mesmo sem JavaScript. Com JS (uf_cidade.js), a lista
@@ -164,7 +158,6 @@ class MeuCadastroForm(forms.ModelForm):
             "categoria_pretendida", "servidor_ativo",
             "maior_titulacao", "area_atuacao", "cnpq_area", "resumo", "lattes",
             "disponibilidade_semanal", "nao_afastado_licenciado",
-            "aceite_comunicacoes",
         ]
         widgets = {
             # `placeholder` é o texto cinza-claro que aparece dentro do campo
