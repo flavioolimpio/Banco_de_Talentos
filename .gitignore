@@ -8,19 +8,19 @@
 # ⚠️ DADOS PESSOAIS — NUNCA COMMITAR (LGPD)
 data/
 media/
-Lattes/
+CHAMADAS_INTERNAS/
 *.db
 *.sqlite3
 *.csv
 *.xlsx
 *.pdf
-indicacoes-quadros-2026/
-convocacao-aviso-proppg-01-2026/
 
 # Segredos
 .env
 .env.*
 !.env.example
+deploy/env_prod
+flavioprivada
 
 # Python
 __pycache__/
