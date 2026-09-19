@@ -15,8 +15,12 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from apps.auditoria.models import AuditAction, AuditLog
 from apps.inscricoes.forms_rh import RevisaoForm
-from apps.inscricoes.models import Inscricao, StatusInscricao
-from apps.usuarios.models import Vinculo
+from apps.inscricoes.models import (
+    Inscricao,
+    OpcaoCriterio,
+    StatusInscricao,
+    TipoCriterio,
+)
 
 
 def _get_client_ip(request):
@@ -26,44 +30,97 @@ def _get_client_ip(request):
     return request.META.get("REMOTE_ADDR")
 
 
+def _validar_item(post_data, item):
+    """Converte a revisão do RH de um item em (pontos, observação).
+
+    Duas formas, conforme a origem do critério:
+
+    - Chamada Interna (fluxo atual): o RH corrige a RESPOSTA — a quantidade
+      ("de 3 projetos declarados, 1 está comprovado") ou a opção escolhida — e
+      os pontos são recalculados pelo mesmo `CriterioEdital.pontuar()` que o
+      candidato usou. Ninguém digita pontuação, dos dois lados.
+
+    - Credenciamento antigo (chamadas de legado): aqueles critérios não têm
+      pontos por unidade nem opções — a pontuação era digitada. Para não zerar
+      inscrição histórica ao reabri-la, o campo de pontos continua disponível
+      nesse caso.
+    """
+    criterio = item.criterio
+    obs = post_data.get(f"obs_{item.pk}", "").strip()
+
+    if item.inscricao.e_legado:
+        bruto = post_data.get(f"validado_{item.pk}", "").strip()
+        if not bruto:
+            return item.pontuacao, obs
+        try:
+            valor = Decimal(bruto.replace(",", "."))
+        except InvalidOperation:
+            valor = Decimal("0")
+        return max(Decimal("0"), min(valor, criterio.maximo)), obs
+
+    if criterio.tipo == TipoCriterio.ESCOLHA:
+        bruto = post_data.get(f"validado_opcao_{item.pk}", "").strip()
+        opcao = None
+        if bruto.isdigit():
+            opcao = OpcaoCriterio.objects.filter(pk=int(bruto), criterio=criterio).first()
+        return criterio.pontuar(opcao=opcao), obs
+
+    bruto = post_data.get(f"validado_qtd_{item.pk}", "").strip()
+    try:
+        quantidade = max(0, int(Decimal(bruto))) if bruto else 0
+    except (InvalidOperation, ValueError):
+        quantidade = 0
+    return criterio.pontuar(quantidade=quantidade), obs
+
+
 def _parse_validacoes(post_data, itens):
-    """
-    Lê as notas validadas do POST e separa o total em duas parcelas:
-    critérios manuais e critérios de API (IFGProduz). A separação é
-    necessária porque a nota final do servidor é a média das duas, e não
-    a soma crua de todos os itens.
-    """
+    """{item_pk: {"pontuacao_validada": ..., "observacao": ...}} + total."""
     validacoes = {}
-    total_manual = Decimal("0.00")
-    total_api = Decimal("0.00")
+    total = Decimal("0.00")
     for item in itens:
-        raw = post_data.get(f"validado_{item.pk}", "").strip()
-        obs = post_data.get(f"obs_{item.pk}", "").strip()
-        if raw:
-            try:
-                valor = Decimal(raw.replace(",", "."))
-            except InvalidOperation:
-                valor = Decimal("0")
-            valor = max(Decimal("0"), min(valor, item.criterio.maximo))
-        else:
-            valor = item.pontuacao
-        validacoes[item.pk] = {"pontuacao_validada": valor, "observacao": obs}
-        if item.criterio.is_api:
-            total_api += valor
-        else:
-            total_manual += valor
-    return validacoes, total_manual, total_api
+        pontos, obs = _validar_item(post_data, item)
+        validacoes[item.pk] = {"pontuacao_validada": pontos, "observacao": obs}
+        total += pontos
+    return validacoes, total
 
 
-def _calcular_total_validado(modalidade, total_manual, total_api):
+def _contexto_itens(itens, post_data=None):
+    """Um dicionário por item, com o que o candidato respondeu e o que o RH vê.
+
+    `post_data` só é passado quando o formulário volta com erro: aí os valores
+    que o RH já tinha digitado são preservados, em vez de voltarem ao original.
     """
-    Calcula a nota validada final. Para servidor, aplica a mesma fórmula do
-    candidato: (min(IFGProduz, 100) + min(critérios, 100)) / 2.
-    Para as demais modalidades, é a soma simples das parcelas.
-    """
-    if modalidade == Vinculo.SERVIDOR:
-        return (min(total_manual, Decimal("100")) + min(total_api, Decimal("100"))) / 2
-    return total_manual + total_api
+    contexto = []
+    for numero, item in enumerate(itens, start=1):
+        criterio = item.criterio
+        legado = item.inscricao.e_legado
+
+        if post_data is not None:
+            qtd = post_data.get(f"validado_qtd_{item.pk}", "")
+            opcao_id = post_data.get(f"validado_opcao_{item.pk}", "")
+            pontos_legado = post_data.get(f"validado_{item.pk}", "")
+        else:
+            # Abertura da tela: o RH parte do que o candidato declarou e só
+            # mexe no que precisar corrigir.
+            qtd = item.quantidade
+            opcao_id = item.opcao_id or ""
+            pontos_legado = (
+                item.pontuacao_validada if item.pontuacao_validada is not None else ""
+            )
+
+        contexto.append(
+            {
+                "numero": numero,
+                "item": item,
+                "criterio": criterio,
+                "legado": legado,
+                "e_escolha": (not legado) and criterio.tipo == TipoCriterio.ESCOLHA,
+                "validado_qtd": qtd,
+                "validado_opcao_id": str(opcao_id),
+                "validado_pontos": pontos_legado,
+            }
+        )
+    return contexto
 
 
 @staff_member_required
@@ -74,13 +131,14 @@ def revisao_view(request, pk):
         messages.warning(request, "Esta inscrição não está em análise e não pode ser revisada.")
         return redirect("admin:inscricoes_inscricao_changelist")
 
-    itens = list(inscricao.itens.select_related("criterio").order_by("criterio__ordem"))
+    itens = list(
+        inscricao.itens.select_related("criterio", "opcao")
+        .prefetch_related("criterio__opcoes")
+        .order_by("criterio__ordem")
+    )
 
     if request.method == "GET":
-        itens_com_score = [
-            (item, item.pontuacao_validada if item.pontuacao_validada is not None else "")
-            for item in itens
-        ]
+        itens_com_score = _contexto_itens(itens)
         return render(request, "rh/revisao.html", {
             "inscricao": inscricao,
             "itens_com_score": itens_com_score,
@@ -90,10 +148,7 @@ def revisao_view(request, pk):
     acao = request.POST.get("acao", "")
     if acao not in ("aprovar", "indeferir"):
         messages.error(request, "Ação inválida.")
-        itens_com_score = [
-            (item, request.POST.get(f"validado_{item.pk}", ""))
-            for item in itens
-        ]
+        itens_com_score = _contexto_itens(itens, request.POST)
         return render(request, "rh/revisao.html", {
             "inscricao": inscricao,
             "itens_com_score": itens_com_score,
@@ -103,18 +158,14 @@ def revisao_view(request, pk):
     form = RevisaoForm(request.POST, acao=acao)
 
     if not form.is_valid():
-        itens_com_score = [
-            (item, request.POST.get(f"validado_{item.pk}", ""))
-            for item in itens
-        ]
+        itens_com_score = _contexto_itens(itens, request.POST)
         return render(request, "rh/revisao.html", {
             "inscricao": inscricao,
             "itens_com_score": itens_com_score,
             "form": form,
         })
 
-    validacoes, total_manual, total_api = _parse_validacoes(request.POST, itens)
-    total_validado = _calcular_total_validado(inscricao.modalidade, total_manual, total_api)
+    validacoes, total_validado = _parse_validacoes(request.POST, itens)
 
     with transaction.atomic():
         for item in itens:

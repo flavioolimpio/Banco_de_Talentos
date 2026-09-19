@@ -115,6 +115,10 @@
     </form>
 </div>
 
+{# Máscara do telefone: formata enquanto a pessoa digita. O `placeholder`,  #}
+{# definido no form, é só o exemplo cinza dentro do campo vazio.           #}
+<script src="{% static 'js/mascaras.js' %}"></script>
+
 {% if "uf" in campos_aba %}
 {# Troca a lista de cidades ao mudar o estado. Arquivo externo porque a CSP  #}
 {# de produção bloqueia <script> inline (script-src 'self').                 #}

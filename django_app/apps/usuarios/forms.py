@@ -167,7 +167,36 @@ class MeuCadastroForm(forms.ModelForm):
             "aceite_comunicacoes",
         ]
         widgets = {
-            "resumo": forms.Textarea(attrs={"rows": 5}),
+            # `placeholder` é o texto cinza-claro que aparece dentro do campo
+            # vazio e some quando a pessoa digita: serve de EXEMPLO do formato
+            # esperado. Não é máscara — não impede nem corrige nada. A máscara
+            # de verdade (a que formata enquanto se digita) está em
+            # static/js/mascaras.js e hoje só o telefone precisa dela.
+            "telefone": forms.TextInput(attrs={
+                "placeholder": "(62) 99999-9999",
+                "inputmode": "tel",
+                "data-mascara": "telefone",
+            }),
+            "email": forms.EmailInput(attrs={"placeholder": "nome@exemplo.com"}),
+            "nome_completo": forms.TextInput(attrs={
+                "placeholder": "Como consta no seu documento de identificação",
+            }),
+            "area_atuacao": forms.TextInput(attrs={
+                "placeholder": "Ex.: Engenharia Elétrica — Sistemas de Potência",
+            }),
+            "lattes": forms.URLInput(attrs={
+                "placeholder": "http://lattes.cnpq.br/0000000000000000",
+            }),
+            "disponibilidade_semanal": forms.NumberInput(attrs={
+                "placeholder": "Ex.: 20",
+            }),
+            "resumo": forms.Textarea(attrs={
+                "rows": 6,
+                "placeholder": (
+                    "Descreva sua atuação profissional: formação, principais áreas "
+                    "de trabalho, projetos e competências técnicas relevantes."
+                ),
+            }),
             "servidor_ativo": ServidorAtivoSelect,
         }
         labels = {

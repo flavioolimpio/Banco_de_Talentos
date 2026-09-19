@@ -353,3 +353,125 @@ class LegadoSomenteLeituraTest(TestCase):
         legado = ChamadaInterna.objects.filter(legado=True)
         self.assertEqual(legado.count(), 3)
         self.assertFalse(legado.filter(publicada=True).exists())
+
+
+class RevisaoRhTest(BaseChamada):
+    """O RH corrige a RESPOSTA do candidato; os pontos são recalculados.
+
+    Ninguém digita pontuação dos dois lados — o mesmo CriterioEdital.pontuar()
+    vale para o candidato e para a banca.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._post()  # inscrição enviada: 2 projetos (80) + Doutorado (100)
+        self.inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
+        self.rh = Usuario.objects.create_superuser(
+            cpf="11144477735",
+            email="rh@ifg.edu.br",
+            nome_completo="RH Teste",
+            password="senha123",
+        )
+        self.client.force_login(self.rh)
+        self.url = reverse("revisao_rh", args=[self.inscricao.pk])
+
+    def _revisar(self, **extra):
+        item_qtd = self.inscricao.itens.get(criterio=self.contagem)
+        item_opc = self.inscricao.itens.get(criterio=self.escolha)
+        dados = {
+            "acao": "aprovar",
+            "parecer_geral": "ok",
+            f"validado_qtd_{item_qtd.pk}": "2",
+            f"validado_opcao_{item_opc.pk}": str(self.doutorado.pk),
+        }
+        dados.update(extra)
+        return self.client.post(self.url, dados)
+
+    def test_confirmar_tudo_mantem_a_pontuacao(self):
+        self._revisar()
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.status, StatusInscricao.APROVADA)
+        self.assertEqual(self.inscricao.total_validado, Decimal("180"))
+
+    def test_reduzir_a_quantidade_reduz_os_pontos(self):
+        # "dos 2 projetos declarados, só 1 está comprovado"
+        item_qtd = self.inscricao.itens.get(criterio=self.contagem)
+        self._revisar(**{f"validado_qtd_{item_qtd.pk}": "1"})
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.total_validado, Decimal("140"))  # 40 + 100
+        item_qtd.refresh_from_db()
+        self.assertEqual(item_qtd.pontuacao_validada, Decimal("40"))
+        # a resposta original do candidato não é sobrescrita
+        self.assertEqual(item_qtd.quantidade, 2)
+
+    def test_trocar_a_opcao_troca_os_pontos(self):
+        item_opc = self.inscricao.itens.get(criterio=self.escolha)
+        self._revisar(**{f"validado_opcao_{item_opc.pk}": str(self.mestrado.pk)})
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.total_validado, Decimal("150"))  # 80 + 70
+
+    def test_desmarcar_a_opcao_zera_o_item(self):
+        item_opc = self.inscricao.itens.get(criterio=self.escolha)
+        self._revisar(**{f"validado_opcao_{item_opc.pk}": ""})
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.total_validado, Decimal("80"))
+
+    def test_quantidade_acima_do_teto_respeita_o_maximo(self):
+        item_qtd = self.inscricao.itens.get(criterio=self.contagem)
+        self._revisar(**{f"validado_qtd_{item_qtd.pk}": "99"})
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.total_validado, Decimal("220"))  # 120 (teto) + 100
+
+    def test_observacao_do_avaliador_e_gravada(self):
+        item_qtd = self.inscricao.itens.get(criterio=self.contagem)
+        self._revisar(**{f"obs_{item_qtd.pk}": "Comprovante do projeto B ilegível."})
+        item_qtd.refresh_from_db()
+        self.assertEqual(item_qtd.observacao_avaliacao, "Comprovante do projeto B ilegível.")
+
+    def test_tela_mostra_a_resposta_declarada(self):
+        resposta = self.client.get(self.url)
+        self.assertContains(resposta, "Confirme a quantidade")
+        self.assertContains(resposta, "Confirme a op")
+        self.assertNotContains(resposta, "IFGProduz")
+
+
+class RevisaoLegadoTest(TestCase):
+    """Inscrição do credenciamento antigo continua com pontuação digitada.
+
+    Recalcular pelos pontos-por-unidade zeraria a pontuação histórica, porque
+    aqueles critérios não têm pontos por unidade nem opções.
+    """
+
+    def setUp(self):
+        from apps.inscricoes.models import InscricaoItem
+
+        self.legado = ChamadaInterna.objects.get(numero=31, ano=2026)
+        self.criterio = CriterioEdital.objects.filter(chamada=self.legado).first()
+        self.usuario = Usuario.objects.create_user(
+            cpf="52998224725", email="leg@test.com", nome_completo="Legado",
+            vinculo=Vinculo.ESTUDANTE, password="senha123",
+        )
+        self.inscricao = Inscricao.objects.create(
+            usuario=self.usuario, chamada=self.legado, modalidade=Vinculo.ESTUDANTE,
+            status=StatusInscricao.EM_ANALISE, total=Decimal("60"),
+        )
+        self.item = InscricaoItem.objects.create(
+            inscricao=self.inscricao, criterio=self.criterio, pontuacao=Decimal("60")
+        )
+        rh = Usuario.objects.create_superuser(
+            cpf="11144477735", email="rh2@ifg.edu.br", nome_completo="RH", password="senha123",
+        )
+        self.client.force_login(rh)
+        self.url = reverse("revisao_rh", args=[self.inscricao.pk])
+
+    def test_campo_em_branco_mantem_a_pontuacao_declarada(self):
+        self.client.post(self.url, {"acao": "aprovar", "parecer_geral": "ok",
+                                    f"validado_{self.item.pk}": ""})
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.total_validado, Decimal("60"))
+
+    def test_rh_pode_digitar_a_pontuacao(self):
+        self.client.post(self.url, {"acao": "aprovar", "parecer_geral": "ok",
+                                    f"validado_{self.item.pk}": "45"})
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.total_validado, Decimal("45"))
