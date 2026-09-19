@@ -114,13 +114,7 @@
         <h1 class="home-title">Banco de Especialistas</h1>
         <p class="home-subtitle">PD&amp;I e Extens&atilde;o Tecnol&oacute;gica</p>
         <p class="home-inst">Polo de Inova&ccedil;&atilde;o do IFG</p>
-
-        <a href="{% url 'chamadas' %}" class="home-cta secondary">Minhas inscri&ccedil;&otilde;es</a>
     </div>
-</div>
-
-<div class="home-banner">
-    <img src="{% static 'imagens/polo.jpg' %}" alt="Polo de Inova&ccedil;&atilde;o do IFG">
 </div>
 
 {# Um cartão por chamada interna aberta para o vínculo do candidato. O grid   #}
@@ -151,5 +145,9 @@
         </p>
     </div>
     {% endfor %}
+</div>
+
+<div class="home-banner">
+    <img src="{% static 'imagens/polo.jpg' %}" alt="Polo de Inova&ccedil;&atilde;o do IFG">
 </div>
 {% endblock %}
