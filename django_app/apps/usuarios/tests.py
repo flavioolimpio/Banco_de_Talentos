@@ -108,7 +108,7 @@ class MeuCadastroFormTest(TestCase):
     def test_form_salva_nome_completo(self):
         from apps.usuarios.forms import MeuCadastroForm
         form = MeuCadastroForm(
-            {"nome_completo": "Novo Nome", "telefone": "", "resumo": ""},
+            {"nome_completo": "Novo Nome", "email": self.user.email, "telefone": "", "resumo": ""},
             instance=self.user,
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -118,10 +118,66 @@ class MeuCadastroFormTest(TestCase):
         form = MeuCadastroForm(instance=self.user)
         self.assertNotIn("cpf", form.fields)
 
-    def test_form_nao_tem_campo_email(self):
+    def test_form_tem_campo_email_obrigatorio(self):
+        # O e-mail passou a ser editável pelo candidato (ele é o canal de
+        # divulgação das chamadas). Continua obrigatório: salvar em branco
+        # gravaria email="" e colidiria no unique com o próximo que fizesse
+        # o mesmo, além de derrubar a recuperação de senha.
         from apps.usuarios.forms import MeuCadastroForm
         form = MeuCadastroForm(instance=self.user)
-        self.assertNotIn("email", form.fields)
+        self.assertIn("email", form.fields)
+        self.assertTrue(form.fields["email"].required)
+
+    def test_form_rejeita_email_em_branco(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm({"nome_completo": "X", "email": ""}, instance=self.user)
+        self.assertFalse(form.is_valid())
+        self.assertIn("email", form.errors)
+
+    def test_form_rejeita_email_de_outro_usuario(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        Usuario.objects.create_user(
+            cpf="11144477735",
+            email="ocupado@test.com",
+            nome_completo="Outro",
+            vinculo=Vinculo.SERVIDOR,
+            password="senha123",
+        )
+        form = MeuCadastroForm(
+            {"nome_completo": "X", "email": "OCUPADO@test.com"}, instance=self.user
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("email", form.errors)
+
+    def test_form_aceita_o_proprio_email_sem_alteracao(self):
+        # Sem o exclude(pk=...) no clean_email, salvar sem mudar o e-mail
+        # colidiria com o próprio registro.
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(
+            {"nome_completo": "X", "email": self.user.email}, instance=self.user
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_form_valida_tamanho_do_resumo(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        curto = MeuCadastroForm(
+            {"nome_completo": "X", "email": self.user.email, "resumo": "palavra " * 10},
+            instance=self.user,
+        )
+        self.assertFalse(curto.is_valid())
+        self.assertIn("resumo", curto.errors)
+
+        longo = MeuCadastroForm(
+            {"nome_completo": "X", "email": self.user.email, "resumo": "palavra " * 300},
+            instance=self.user,
+        )
+        self.assertFalse(longo.is_valid())
+
+        ok = MeuCadastroForm(
+            {"nome_completo": "X", "email": self.user.email, "resumo": "palavra " * 80},
+            instance=self.user,
+        )
+        self.assertTrue(ok.is_valid(), ok.errors)
 
     def test_form_nao_tem_campo_vinculo(self):
         from apps.usuarios.forms import MeuCadastroForm
@@ -156,10 +212,16 @@ class MeuCadastroViewTest(TestCase):
         response = self.client.get(reverse("meu_cadastro"))
         self.assertContains(response, "Dados Pessoais")
 
-    def test_get_aba_endereco(self):
-        response = self.client.get(reverse("meu_cadastro") + "?aba=endereco")
+    def test_aba_dados_tem_uf_e_cidade(self):
+        # A aba "Endereço" deixou de existir: UF e cidade subiram para "Dados".
+        response = self.client.get(reverse("meu_cadastro") + "?aba=dados")
         self.assertContains(response, "UF")
         self.assertContains(response, "Cidade")
+
+    def test_link_antigo_de_endereco_cai_em_dados(self):
+        response = self.client.get(reverse("meu_cadastro") + "?aba=endereco")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Dados Pessoais")
 
     def test_get_aba_formacao(self):
         response = self.client.get(reverse("meu_cadastro") + "?aba=formacao")
@@ -168,16 +230,39 @@ class MeuCadastroViewTest(TestCase):
     def test_post_salva_nome_completo(self):
         self.client.post(
             reverse("meu_cadastro") + "?aba=dados",
-            {"nome_completo": "Nome Atualizado", "telefone": ""},
+            {"nome_completo": "Nome Atualizado", "email": self.user.email, "telefone": ""},
         )
         self.user.refresh_from_db()
         self.assertEqual(self.user.nome_completo, "Nome Atualizado")
 
-    def test_post_nao_altera_email(self):
+    def test_post_altera_email(self):
+        from apps.auditoria.models import AuditAction, AuditLog
         email_original = self.user.email
         self.client.post(
             reverse("meu_cadastro") + "?aba=dados",
-            {"nome_completo": "X", "email": "hacker@evil.com"},
+            {"nome_completo": "X", "email": "Novo.Email@IFG.edu.br"},
+        )
+        self.user.refresh_from_db()
+        # normalizado para minúsculas, igual ao cadastro inicial
+        self.assertEqual(self.user.email, "novo.email@ifg.edu.br")
+        log = AuditLog.objects.filter(
+            ator=self.user, acao=AuditAction.CADASTRO_ATUALIZADO
+        ).latest("id")
+        self.assertEqual(log.detalhes["email_anterior"], email_original)
+        self.assertEqual(log.detalhes["email_novo"], "novo.email@ifg.edu.br")
+
+    def test_post_nao_altera_email_para_o_de_outro_usuario(self):
+        Usuario.objects.create_user(
+            cpf="11144477735",
+            email="ocupado@test.com",
+            nome_completo="Outro",
+            vinculo=Vinculo.SERVIDOR,
+            password="senha123",
+        )
+        email_original = self.user.email
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=dados",
+            {"nome_completo": "X", "email": "ocupado@test.com"},
         )
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, email_original)
@@ -186,7 +271,7 @@ class MeuCadastroViewTest(TestCase):
         vinculo_original = self.user.vinculo
         self.client.post(
             reverse("meu_cadastro") + "?aba=dados",
-            {"nome_completo": "X", "vinculo": "estudante"},
+            {"nome_completo": "X", "email": self.user.email, "vinculo": "estudante"},
         )
         self.user.refresh_from_db()
         self.assertEqual(self.user.vinculo, vinculo_original)
@@ -196,7 +281,7 @@ class MeuCadastroViewTest(TestCase):
         self.user.save(update_fields=["cep"])
         self.client.post(
             reverse("meu_cadastro") + "?aba=dados",
-            {"nome_completo": "Novo Nome"},
+            {"nome_completo": "Novo Nome", "email": self.user.email},
         )
         self.user.refresh_from_db()
         self.assertEqual(self.user.cep, "75000000")
@@ -212,7 +297,7 @@ class MeuCadastroViewTest(TestCase):
         self.user.save(update_fields=["cep"])
         self.client.post(
             reverse("meu_cadastro") + "?aba=dados",
-            {"nome_completo": "Novo Nome", "cep": "99999999"},
+            {"nome_completo": "Novo Nome", "email": self.user.email, "cep": "99999999"},
         )
         self.user.refresh_from_db()
         self.assertEqual(self.user.cep, "75000000")
@@ -222,7 +307,7 @@ class MeuCadastroViewTest(TestCase):
         cpf_original = self.user.cpf
         self.client.post(
             reverse("meu_cadastro") + "?aba=dados",
-            {"nome_completo": "X", "cpf": "11144477735"},
+            {"nome_completo": "X", "email": self.user.email, "cpf": "11144477735"},
         )
         self.user.refresh_from_db()
         self.assertEqual(self.user.cpf, cpf_original)
@@ -238,7 +323,7 @@ class MeuCadastroViewTest(TestCase):
         from apps.auditoria.models import AuditLog, AuditAction
         self.client.post(
             reverse("meu_cadastro") + "?aba=dados",
-            {"nome_completo": "Log Teste"},
+            {"nome_completo": "Log Teste", "email": self.user.email},
         )
         self.assertTrue(
             AuditLog.objects.filter(
@@ -270,8 +355,8 @@ class PerfilProfissionalModelTest(TestCase):
 
     def _preencher_campos_base(self, usuario):
         usuario.categoria_pretendida = CategoriaPretendida.PESQUISADOR
-        usuario.nivel_formacao = "Doutorado"
-        usuario.area_atuacao = "Engenharia"
+        usuario.maior_titulacao = MaiorTitulacao.DOUTORADO
+        usuario.cnpq_area = "3.04"
         usuario.disponibilidade_semanal = 20
 
     def _confirmar_todas_declaracoes(self, usuario):
@@ -336,7 +421,7 @@ class MeuCadastroFormPerfilTest(TestCase):
     def test_form_aceita_disponibilidade_dentro_da_faixa_servidor_ativo(self):
         from apps.usuarios.forms import MeuCadastroForm
         form = MeuCadastroForm(
-            {"nome_completo": "X", "servidor_ativo": "true", "disponibilidade_semanal": "20"},
+            {"nome_completo": "X", "email": self.servidor_ativo.email, "servidor_ativo": "true", "disponibilidade_semanal": "20"},
             instance=self.servidor_ativo,
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -344,7 +429,7 @@ class MeuCadastroFormPerfilTest(TestCase):
     def test_form_rejeita_disponibilidade_acima_da_faixa_servidor_ativo(self):
         from apps.usuarios.forms import MeuCadastroForm
         form = MeuCadastroForm(
-            {"nome_completo": "X", "servidor_ativo": "true", "disponibilidade_semanal": "30"},
+            {"nome_completo": "X", "email": self.servidor_ativo.email, "servidor_ativo": "true", "disponibilidade_semanal": "30"},
             instance=self.servidor_ativo,
         )
         self.assertFalse(form.is_valid())
@@ -353,7 +438,7 @@ class MeuCadastroFormPerfilTest(TestCase):
     def test_form_aceita_disponibilidade_ate_40h_para_colaborador_externo(self):
         from apps.usuarios.forms import MeuCadastroForm
         form = MeuCadastroForm(
-            {"nome_completo": "X", "disponibilidade_semanal": "40"},
+            {"nome_completo": "X", "email": self.externo.email, "disponibilidade_semanal": "40"},
             instance=self.externo,
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -361,7 +446,7 @@ class MeuCadastroFormPerfilTest(TestCase):
     def test_form_rejeita_disponibilidade_abaixo_de_5h(self):
         from apps.usuarios.forms import MeuCadastroForm
         form = MeuCadastroForm(
-            {"nome_completo": "X", "disponibilidade_semanal": "3"},
+            {"nome_completo": "X", "email": self.externo.email, "disponibilidade_semanal": "3"},
             instance=self.externo,
         )
         self.assertFalse(form.is_valid())
@@ -370,7 +455,7 @@ class MeuCadastroFormPerfilTest(TestCase):
         """Testa que checkbox 'nao_afastado_licenciado' com valor "on" é convertido para True."""
         from apps.usuarios.forms import MeuCadastroForm
         form = MeuCadastroForm(
-            {"nome_completo": "X", "nao_afastado_licenciado": "on"},
+            {"nome_completo": "X", "email": self.servidor_ativo.email, "nao_afastado_licenciado": "on"},
             instance=self.servidor_ativo,
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -380,7 +465,7 @@ class MeuCadastroFormPerfilTest(TestCase):
         """Campo 'nao_afastado_licenciado' é opcional e valida sem ser preenchido."""
         from apps.usuarios.forms import MeuCadastroForm
         form = MeuCadastroForm(
-            {"nome_completo": "X", "servidor_ativo": ""},
+            {"nome_completo": "X", "email": self.servidor_ativo.email, "servidor_ativo": ""},
             instance=self.servidor_ativo,
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -404,35 +489,42 @@ class MeuCadastroPerfilViewTest(TestCase):
             password="senha123",
         )
 
-    def test_get_aba_perfil_para_servidor_mostra_campo_servidor_ativo(self):
+    def test_aba_dados_para_servidor_mostra_campo_servidor_ativo(self):
+        # servidor_ativo e categoria_pretendida subiram da aba "perfil" para
+        # "dados" — são identificação/vínculo (Bloco A da especificação).
         self.client.force_login(self.servidor)
-        response = self.client.get(reverse("meu_cadastro") + "?aba=perfil")
+        response = self.client.get(reverse("meu_cadastro") + "?aba=dados")
         self.assertContains(response, "name=\"servidor_ativo\"")
 
-    def test_get_aba_perfil_para_externo_esconde_campo_servidor_ativo(self):
+    def test_aba_dados_para_externo_esconde_campo_servidor_ativo(self):
         self.client.force_login(self.externo)
-        response = self.client.get(reverse("meu_cadastro") + "?aba=perfil")
+        response = self.client.get(reverse("meu_cadastro") + "?aba=dados")
         self.assertNotContains(response, "name=\"servidor_ativo\"")
 
-    def test_post_perfil_salva_categoria(self):
+    def test_post_dados_salva_categoria(self):
         self.client.force_login(self.externo)
         self.client.post(
-            reverse("meu_cadastro") + "?aba=perfil",
-            {"nome_completo": "X", "categoria_pretendida": "pesquisador", "disponibilidade_semanal": "20"},
+            reverse("meu_cadastro") + "?aba=dados",
+            {"nome_completo": "X", "email": self.externo.email,
+             "categoria_pretendida": "pesquisador"},
         )
         self.externo.refresh_from_db()
         self.assertEqual(self.externo.categoria_pretendida, "pesquisador")
 
-    def test_get_aba_perfil_nao_mostra_maior_titulacao(self):
+    def test_maior_titulacao_fica_na_aba_formacao(self):
+        # Voltou ao formulário (lista fechada), na aba Formação — não na Perfil.
         self.client.force_login(self.externo)
-        response = self.client.get(reverse("meu_cadastro") + "?aba=perfil")
-        self.assertNotContains(response, "name=\"maior_titulacao\"")
+        perfil = self.client.get(reverse("meu_cadastro") + "?aba=perfil")
+        self.assertNotContains(perfil, "name=\"maior_titulacao\"")
+        formacao = self.client.get(reverse("meu_cadastro") + "?aba=formacao")
+        self.assertContains(formacao, "name=\"maior_titulacao\"")
+        self.assertContains(formacao, "name=\"cnpq_area\"")
 
     def test_post_perfil_grava_declaracao_com_timestamp(self):
         self.client.force_login(self.externo)
         self.client.post(
             reverse("meu_cadastro") + "?aba=perfil",
-            {"nome_completo": "X", "declaracao_veracidade": "on"},
+            {"nome_completo": "X", "email": self.externo.email, "declaracao_veracidade": "on"},
         )
         self.externo.refresh_from_db()
         self.assertTrue(self.externo.declaracao_veracidade)
@@ -445,7 +537,7 @@ class MeuCadastroPerfilViewTest(TestCase):
         self.client.force_login(self.externo)
         self.client.post(
             reverse("meu_cadastro") + "?aba=perfil",
-            {"nome_completo": "X"},
+            {"nome_completo": "X", "email": self.externo.email},
         )
         self.externo.refresh_from_db()
         self.assertTrue(self.externo.declaracao_veracidade)
@@ -456,7 +548,7 @@ class MeuCadastroPerfilViewTest(TestCase):
         self.client.force_login(self.externo)
         self.client.post(
             reverse("meu_cadastro") + "?aba=perfil",
-            {"nome_completo": "X", "servidor_ativo": "true"},
+            {"nome_completo": "X", "email": self.externo.email, "servidor_ativo": "true"},
         )
         self.externo.refresh_from_db()
         self.assertIsNone(self.externo.servidor_ativo)
@@ -515,8 +607,8 @@ class HomeBannerPerfilTest(TestCase):
 
     def test_banner_some_quando_perfil_completo(self):
         self.usuario.categoria_pretendida = CategoriaPretendida.PESQUISADOR
-        self.usuario.nivel_formacao = "Doutorado"
-        self.usuario.area_atuacao = "Engenharia"
+        self.usuario.maior_titulacao = MaiorTitulacao.DOUTORADO
+        self.usuario.cnpq_area = "3.04"
         self.usuario.disponibilidade_semanal = 20
         self.usuario.confirmar_declaracao("ciencia_credenciamento")
         self.usuario.confirmar_declaracao("declaracao_veracidade")
@@ -524,3 +616,77 @@ class HomeBannerPerfilTest(TestCase):
         self.usuario.save()
         response = self.client.get(reverse("home"))
         self.assertNotContains(response, "Complete seu perfil")
+
+
+class AceiteComunicacoesTest(TestCase):
+    """Consentimento de receber e-mail sobre novas chamadas.
+
+    Ao contrário das declarações (veracidade, ciência, LGPD), este é
+    REVOGÁVEL a qualquer tempo — LGPD, art. 8º, §5º. Por isso não passa por
+    confirmar_declaracao(), que é de via única.
+    """
+
+    def setUp(self):
+        self.usuario = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="comunicacoes@test.com",
+            nome_completo="Comunicações Teste",
+            vinculo=Vinculo.COLABORADOR_EXTERNO,
+            password="senha123",
+        )
+        self.client.force_login(self.usuario)
+
+    def _post_perfil(self, **extra):
+        dados = {"nome_completo": "X", "email": self.usuario.email}
+        dados.update(extra)
+        return self.client.post(reverse("meu_cadastro") + "?aba=perfil", dados)
+
+    def test_comeca_desmarcado(self):
+        self.assertFalse(self.usuario.aceite_comunicacoes)
+        self.assertIsNone(self.usuario.aceite_comunicacoes_em)
+
+    def test_marcar_grava_timestamp(self):
+        self._post_perfil(aceite_comunicacoes="on")
+        self.usuario.refresh_from_db()
+        self.assertTrue(self.usuario.aceite_comunicacoes)
+        self.assertIsNotNone(self.usuario.aceite_comunicacoes_em)
+
+    def test_pode_ser_revogado(self):
+        self._post_perfil(aceite_comunicacoes="on")
+        self.usuario.refresh_from_db()
+        marcado_em = self.usuario.aceite_comunicacoes_em
+
+        self._post_perfil()  # checkbox ausente = desmarcado
+        self.usuario.refresh_from_db()
+        self.assertFalse(self.usuario.aceite_comunicacoes)
+        # a revogação também é datada — não fica com a data da concessão
+        self.assertNotEqual(self.usuario.aceite_comunicacoes_em, marcado_em)
+
+    def test_salvar_sem_mudar_nao_redata(self):
+        self._post_perfil(aceite_comunicacoes="on")
+        self.usuario.refresh_from_db()
+        primeira_data = self.usuario.aceite_comunicacoes_em
+
+        self._post_perfil(aceite_comunicacoes="on")
+        self.usuario.refresh_from_db()
+        self.assertEqual(self.usuario.aceite_comunicacoes_em, primeira_data)
+
+
+class GrandeAreaCnpqTest(TestCase):
+    def setUp(self):
+        self.usuario = Usuario.objects.create_user(
+            cpf="52998224725",
+            email="cnpq@test.com",
+            nome_completo="CNPq Teste",
+            vinculo=Vinculo.SERVIDOR,
+            password="senha123",
+        )
+
+    def test_vazio_quando_area_nao_informada(self):
+        self.assertEqual(self.usuario.grande_area_cnpq, "")
+
+    def test_derivada_do_prefixo_do_codigo(self):
+        self.usuario.cnpq_area = "3.04"
+        self.assertEqual(self.usuario.grande_area_cnpq, "3. Engenharias")
+        self.usuario.cnpq_area = "1.06"
+        self.assertEqual(self.usuario.grande_area_cnpq, "1. Ciências Exatas e da Terra")

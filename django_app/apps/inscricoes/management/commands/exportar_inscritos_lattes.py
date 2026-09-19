@@ -143,7 +143,7 @@ class Command(BaseCommand):
                     [
                         usuario.nome_completo,
                         ins.get_tipo_servidor_display() or "—",
-                        usuario.nivel_formacao or "—",
+                        usuario.get_maior_titulacao_display() or usuario.nivel_formacao or "—",
                         usuario.area_atuacao or "—",
                         usuario.email,
                         usuario.lattes or "SEM LATTES",

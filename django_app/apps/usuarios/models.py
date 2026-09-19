@@ -3,6 +3,8 @@ from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
 
+from apps.usuarios.cnpq import CNPQ_AREAS, GRANDES_AREAS_CNPQ
+
 
 class Vinculo(models.TextChoices):
     ESTUDANTE = "estudante", "Estudante"
@@ -125,6 +127,19 @@ class Usuario(AbstractUser):
         "não afastado(a)/licenciado(a)", null=True, blank=True
     )
 
+    cnpq_area = models.CharField(
+        "área do conhecimento (CNPq)", max_length=10, choices=CNPQ_AREAS, blank=True
+    )
+
+    # Consentimento de receber e-mail sobre novas chamadas (Bloco F da
+    # especificação). É REVOGÁVEL a qualquer tempo — LGPD, art. 8º, §5º —, por
+    # isso é um checkbox comum e não usa confirmar_declaracao(), que é de via
+    # única. O `_em` registra tanto a concessão quanto a revogação.
+    aceite_comunicacoes = models.BooleanField(
+        "aceito receber e-mail com divulgação de vagas", default=False
+    )
+    aceite_comunicacoes_em = models.DateTimeField(null=True, blank=True)
+
     ciencia_credenciamento = models.BooleanField("ciência de que o credenciamento não garante vaga", default=False)
     ciencia_credenciamento_em = models.DateTimeField(null=True, blank=True)
     declaracao_veracidade = models.BooleanField("declaração de veracidade (art. 299 CP)", default=False)
@@ -162,11 +177,22 @@ class Usuario(AbstractUser):
             setattr(self, f"{campo}_em", timezone.now())
 
     @property
+    def grande_area_cnpq(self) -> str:
+        """Grande área derivada do prefixo do código — ex.: "1.06" → Exatas.
+
+        Derivada em vez de armazenada numa segunda coluna, que só teria como
+        ficar dessincronizada com a área.
+        """
+        if not self.cnpq_area:
+            return ""
+        return GRANDES_AREAS_CNPQ.get(self.cnpq_area[0], "")
+
+    @property
     def perfil_completo(self) -> bool:
         campos = [
             self.categoria_pretendida,
-            self.nivel_formacao,
-            self.area_atuacao,
+            self.maior_titulacao,
+            self.cnpq_area,
             self.disponibilidade_semanal,
         ]
         if self.vinculo == Vinculo.SERVIDOR:

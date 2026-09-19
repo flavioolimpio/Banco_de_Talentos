@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import PasswordResetConfirmView, PasswordResetDoneView, PasswordResetView
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from apps.auditoria.models import AuditAction, AuditLog
@@ -88,16 +89,21 @@ def home_view(request):
     return render(request, "usuarios/home.html", {"inscricao": inscricao})
 
 
+# Três abas, conforme os blocos A–G de
+# docs/Estrutura_Perfil_Cadastro_Banco_Especialistas.md. A aba "endereco"
+# deixou de existir (UF e cidade subiram para "dados"); links antigos
+# ?aba=endereco não quebram porque aba desconhecida cai em "dados".
 _ABAS_CAMPOS = {
     "dados": [
-        "nome_completo", "telefone", "data_nascimento",
-        "genero", "resumo",
-    ],
-    "endereco": ["uf", "cidade"],
-    "formacao": ["nivel_formacao", "area_atuacao", "lattes", "linkedin", "instituicao"],
-    "perfil": [
+        "nome_completo", "email", "telefone", "uf", "cidade",
         "categoria_pretendida", "servidor_ativo",
+    ],
+    "formacao": [
+        "maior_titulacao", "area_atuacao", "cnpq_area", "resumo", "lattes",
+    ],
+    "perfil": [
         "disponibilidade_semanal", "nao_afastado_licenciado",
+        "aceite_comunicacoes",
     ],
 }
 
@@ -111,8 +117,14 @@ def meu_cadastro_view(request):
     if aba not in _ABAS_CAMPOS:
         aba = "dados"
     campos_aba = list(_ABAS_CAMPOS[aba])
-    if aba == "perfil" and request.user.vinculo != Vinculo.SERVIDOR:
+    if request.user.vinculo != Vinculo.SERVIDOR:
         campos_aba = [c for c in campos_aba if c not in ("servidor_ativo", "nao_afastado_licenciado")]
+
+    # Lidos ANTES do is_valid(): ele chama _post_clean, que já grava os dados
+    # limpos dentro de form.instance — e form.instance É o request.user. Lido
+    # depois, o "valor anterior" já seria o novo, e o log não serviria de nada.
+    email_anterior = request.user.email
+    aceite_comunicacoes_anterior = request.user.aceite_comunicacoes
 
     form = MeuCadastroForm(request.POST or None, instance=request.user)
 
@@ -126,10 +138,23 @@ def meu_cadastro_view(request):
                     instance.confirmar_declaracao(campo)
                     update_fields += [campo, f"{campo}_em"]
                     declaracoes_confirmadas.append(campo)
+            # Consentimento de comunicação é revogável (LGPD, art. 8º, §5º):
+            # carimba a data toda vez que o valor MUDA, nos dois sentidos.
+            if instance.aceite_comunicacoes != aceite_comunicacoes_anterior:
+                instance.aceite_comunicacoes_em = timezone.now()
+                update_fields.append("aceite_comunicacoes_em")
         instance.save(update_fields=update_fields)
         detalhes = {"aba": aba}
         if declaracoes_confirmadas:
             detalhes["declaracoes"] = declaracoes_confirmadas
+        # O e-mail é credencial de login (o backend aceita CPF ou e-mail) e o
+        # canal de recuperação de senha: a troca vai para o AuditLog com os dois
+        # valores, para o RH conseguir reconstruir quem mudou o quê.
+        if instance.email != email_anterior:
+            detalhes["email_anterior"] = email_anterior
+            detalhes["email_novo"] = instance.email
+        if instance.aceite_comunicacoes != aceite_comunicacoes_anterior:
+            detalhes["aceite_comunicacoes"] = instance.aceite_comunicacoes
         audit(request, AuditAction.CADASTRO_ATUALIZADO, alvo=request.user, detalhes=detalhes)
         messages.success(request, "Dados atualizados com sucesso.")
         return redirect(f"{reverse('meu_cadastro')}?aba={aba}")

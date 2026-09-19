@@ -128,38 +128,80 @@ class MeuCadastroForm(forms.ModelForm):
         widget=forms.CheckboxInput(attrs={"style": "margin-top:3px;flex-shrink:0;width:16px;height:16px"}),
     )
 
+    aceite_comunicacoes = forms.BooleanField(
+        required=False,
+        label="Aceito receber e-mail com a divulgação de novas vagas",
+        widget=forms.CheckboxInput(attrs={"style": "margin-top:3px;flex-shrink:0;width:16px;height:16px"}),
+    )
+
     class Meta:
         model = Usuario
+        # Campos do cadastro enxuto, conforme os blocos A–G de
+        # docs/Estrutura_Perfil_Cadastro_Banco_Especialistas.md. Vários campos
+        # que existiam aqui (data de nascimento, gênero, instituição, LinkedIn,
+        # nível de formação em texto livre) saíram do formulário — mas as
+        # COLUNAS continuam no banco. Tirar do form não apaga dado.
         fields = [
-            "nome_completo", "telefone", "data_nascimento",
-            "genero", "resumo",
+            "nome_completo", "email", "telefone",
             "uf", "cidade",
-            "nivel_formacao", "area_atuacao", "lattes", "linkedin", "instituicao",
             "categoria_pretendida", "servidor_ativo",
+            "maior_titulacao", "area_atuacao", "cnpq_area", "resumo", "lattes",
             "disponibilidade_semanal", "nao_afastado_licenciado",
+            "aceite_comunicacoes",
         ]
         widgets = {
-            "data_nascimento": forms.DateInput(
-                attrs={"type": "date"}, format="%Y-%m-%d"
-            ),
-            "resumo": forms.Textarea(attrs={"rows": 3}),
-            "linkedin": forms.TextInput(attrs={"placeholder": "https://linkedin.com/in/..."}),
+            "resumo": forms.Textarea(attrs={"rows": 5}),
             "servidor_ativo": ServidorAtivoSelect,
         }
         labels = {
             "uf": "Estado (UF)",
-            "nivel_formacao": "Nível de formação (ex.: Graduação, Mestrado, Doutorado)",
-            "area_atuacao": "Área de atuação (ex.: Engenharia Civil, Direito, Educação)",
+            "email": "E-mail",
+            "maior_titulacao": "Maior titulação concluída",
+            "area_atuacao": "Curso e área de formação",
+            "cnpq_area": "Área do conhecimento (Tabela CNPq)",
+            "resumo": "Resumo da atuação profissional",
+        }
+        help_texts = {
+            "email": "Usado para a divulgação de vagas e para recuperar a senha.",
+            "lattes": "Currículo atualizado nos últimos 6 meses.",
+            "resumo": "Entre 50 e 200 palavras.",
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance and self.instance.data_nascimento:
-            self.initial["data_nascimento"] = self.instance.data_nascimento.strftime(
-                "%Y-%m-%d"
-            )
         for field in self.fields.values():
             field.required = False
+        # ATENÇÃO: esta linha vem DEPOIS do laço acima de propósito. Sem ela o
+        # e-mail ficaria opcional e salvar a aba com o campo vazio gravaria
+        # email="" — o segundo usuário a fazer isso bateria no unique=True
+        # (erro 500) e o primeiro perderia a recuperação de senha.
+        self.fields["email"].required = True
+
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip().lower()
+        # exclude(pk=...) é obrigatório: sem ele, quem salvasse a aba sem mudar
+        # o e-mail colidiria com o próprio registro.
+        duplicado = (
+            Usuario.objects.filter(email__iexact=email)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        )
+        if duplicado:
+            raise ValidationError("Já existe um cadastro com este e-mail.")
+        return email
+
+    def clean_resumo(self):
+        # Só valida quando preenchido: todos os campos são opcionais e exigir o
+        # resumo aqui impediria de salvar qualquer outra aba.
+        texto = (self.cleaned_data.get("resumo") or "").strip()
+        if texto:
+            palavras = len(texto.split())
+            if not 50 <= palavras <= 200:
+                raise ValidationError(
+                    f"O resumo deve ter entre 50 e 200 palavras "
+                    f"(o seu tem {palavras})."
+                )
+        return texto
 
     def clean_disponibilidade_semanal(self):
         horas = self.cleaned_data.get("disponibilidade_semanal")
