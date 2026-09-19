@@ -42,9 +42,9 @@
                    class="sidebar-link{% if request.resolver_match.url_name == 'home' %} active{% endif %}">
                     &#8962; Home
                 </a>
-                <a href="{% url 'inscricao' %}"
-                   class="sidebar-link{% if request.resolver_match.url_name == 'inscricao' or request.resolver_match.url_name == 'inscricao_confirmacao' %} active{% endif %}">
-                    &#9998; Minha inscri&ccedil;&atilde;o
+                <a href="{% url 'chamadas' %}"
+                   class="sidebar-link{% if request.resolver_match.url_name in 'chamadas,chamada_detalhe,inscricao_chamada,inscricao_detalhe' %} active{% endif %}">
+                    &#9998; Minhas inscri&ccedil;&otilde;es
                 </a>
                 <a href="{% url 'meu_cadastro' %}"
                    class="sidebar-link{% if request.resolver_match.url_name == 'meu_cadastro' %} active{% endif %}">

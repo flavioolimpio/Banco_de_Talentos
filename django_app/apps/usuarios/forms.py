@@ -2,8 +2,10 @@ from django import forms
 from django.contrib.auth import authenticate
 from django.contrib.auth.forms import PasswordResetForm, SetPasswordForm
 from django.core.exceptions import ValidationError
+from django.templatetags.static import static
 
 from apps.usuarios.models import Usuario, Vinculo
+from apps.usuarios.municipios import UF_CHOICES, municipios_de
 from apps.usuarios.validators import somente_digitos, validar_cpf
 
 
@@ -134,6 +136,21 @@ class MeuCadastroForm(forms.ModelForm):
         widget=forms.CheckboxInput(attrs={"style": "margin-top:3px;flex-shrink:0;width:16px;height:16px"}),
     )
 
+    # Estado e cidade são selects encadeados. O estado tem lista fixa; a cidade
+    # é preenchida em __init__ com os municípios do estado escolhido, para o
+    # formulário funcionar mesmo sem JavaScript. Com JS (uf_cidade.js), a lista
+    # troca na hora em que o estado muda.
+    uf = forms.ChoiceField(
+        label="Estado",
+        required=False,
+        choices=[("", "Selecione o estado")] + UF_CHOICES,
+    )
+    cidade = forms.ChoiceField(
+        label="Cidade",
+        required=False,
+        choices=[("", "Selecione primeiro o estado")],
+    )
+
     class Meta:
         model = Usuario
         # Campos do cadastro enxuto, conforme os blocos A–G de
@@ -176,6 +193,33 @@ class MeuCadastroForm(forms.ModelForm):
         # email="" — o segundo usuário a fazer isso bateria no unique=True
         # (erro 500) e o primeiro perderia a recuperação de senha.
         self.fields["email"].required = True
+        self._preparar_cidades()
+
+    def _preparar_cidades(self):
+        """Preenche as opções de cidade com os municípios do estado atual.
+
+        No POST vale a UF que veio no formulário — senão o Django recusaria a
+        cidade que o usuário acabou de escolher, por não constar das opções
+        montadas a partir do valor antigo.
+        """
+        if self.is_bound:
+            uf = self.data.get(self.add_prefix("uf"), "")
+        else:
+            uf = getattr(self.instance, "uf", "") or ""
+
+        # O JS lê a URL daqui em vez de ter o caminho fixo no código: assim o
+        # hash que o WhiteNoise põe no nome do arquivo em produção é respeitado.
+        self.fields["cidade"].widget.attrs["data-municipios-url"] = static(
+            "js/municipios.json"
+        )
+
+        cidades = municipios_de(uf)
+        if cidades:
+            self.fields["cidade"].choices = [("", "Selecione a cidade")] + [
+                (nome, nome) for nome in cidades
+            ]
+        else:
+            self.fields["cidade"].choices = [("", "Selecione primeiro o estado")]
 
     def clean_email(self):
         email = (self.cleaned_data.get("email") or "").strip().lower()

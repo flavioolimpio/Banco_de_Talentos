@@ -11,6 +11,18 @@ from apps.inscricoes.admin import InscricaoAdmin
 from apps.inscricoes.models import CriterioEdital, Inscricao, StatusInscricao
 from apps.inscricoes.quadros import QUADROS_INSCRICAO
 
+
+def chamada_de_teste(numero: int = 31):
+    """Chamada usada pelos testes que só precisam de uma inscrição válida.
+
+    Devolve a chamada de legado criada pela migration 0013 (29 = servidor,
+    30 = colaborador externo, 31 = estudante). Os testes abaixo exercitam o
+    fluxo antigo de inscrição, então é a chamada certa para eles.
+    """
+    from apps.inscricoes.models import ChamadaInterna
+
+    return ChamadaInterna.objects.get(numero=numero, ano=2026)
+
 User = get_user_model()
 
 
@@ -138,6 +150,7 @@ class InscricaoAdminActionsTest(TestCase):
             password="CandPass123!",
         )
         self.inscricao = Inscricao.objects.create(
+            chamada=chamada_de_teste(),
             usuario=self.candidato,
             modalidade="estudante",
             status=StatusInscricao.PENDENTE,
@@ -206,13 +219,22 @@ from django.urls import reverse
 
 
 class InscricaoUrlsTest(TestCase):
-    def test_url_inscricao_resolve(self):
-        url = reverse("inscricao")
-        self.assertEqual(url, "/inscricao/")
+    def test_urls_das_chamadas_resolvem(self):
+        self.assertEqual(reverse("chamadas"), "/chamadas/")
+        self.assertEqual(reverse("chamada_detalhe", args=[7]), "/chamadas/7/")
+        self.assertEqual(reverse("inscricao_chamada", args=[7]), "/chamadas/7/inscricao/")
+        self.assertEqual(reverse("inscricao_detalhe", args=[9]), "/inscricoes/9/")
 
-    def test_url_confirmacao_resolve(self):
-        url = reverse("inscricao_confirmacao")
-        self.assertEqual(url, "/inscricao/confirmacao/")
+    def test_rotas_antigas_levam_para_a_lista_de_chamadas(self):
+        # Link salvo ou favorito de candidato não pode dar 404.
+        from apps.usuarios.models import Usuario, Vinculo
+        user = Usuario.objects.create_user(
+            cpf="52998224725", email="rota@test.com", nome_completo="Rota",
+            vinculo=Vinculo.ESTUDANTE, password="senha123",
+        )
+        self.client.force_login(user)
+        self.assertRedirects(self.client.get("/inscricao/"), reverse("chamadas"))
+        self.assertRedirects(self.client.get("/inscricao/confirmacao/"), reverse("chamadas"))
 
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -338,252 +360,6 @@ class InscricaoFormTest(TestCase):
         self.assertIn("comprovantes_pdf", form.errors)
 
 
-class InscricaoViewGetTest(TestCase):
-    def setUp(self):
-        call_command("popular_criterios", verbosity=0)
-        self.candidato = Usuario.objects.create_user(
-            cpf="11144477735",
-            email="candidato@test.com",
-            nome_completo="Candidato Teste",
-            vinculo=Vinculo.ESTUDANTE,
-            password="senha123",
-        )
-        self.client.force_login(self.candidato)
-
-    def test_get_retorna_200(self):
-        response = self.client.get(reverse("inscricao"))
-        self.assertEqual(response.status_code, 200)
-
-    def test_get_exibe_criterios_da_modalidade(self):
-        from django.utils.html import escape
-        response = self.client.get(reverse("inscricao"))
-        criterios = CriterioEdital.objects.filter(modalidade="estudante")
-        for criterio in criterios:
-            self.assertContains(response, escape(criterio.criterio))
-
-    def test_get_redireciona_se_inscricao_enviada(self):
-        Inscricao.objects.create(
-            usuario=self.candidato,
-            modalidade="estudante",
-            status=StatusInscricao.EM_ANALISE,
-            enviada_em=timezone.now(),
-        )
-        response = self.client.get(reverse("inscricao"))
-        self.assertRedirects(response, reverse("inscricao_confirmacao"))
-
-    def test_get_sem_criterios_exibe_aviso(self):
-        CriterioEdital.objects.filter(modalidade="estudante").update(ativo=False)
-        response = self.client.get(reverse("inscricao"))
-        self.assertContains(response, "preparação")
-
-    def test_exibe_apenas_edital_da_modalidade(self):
-        # candidato é Estudante → vê só o edital 31/2026, não os outros.
-        response = self.client.get(reverse("inscricao"))
-        self.assertContains(response, "46637-edital-proppg-n-31-2026")
-        self.assertNotContains(response, "46636-edital-proppg-n-30-2026")
-        self.assertNotContains(response, "46583-edital-proppg-n-29-2026")
-
-
-class InscricaoSubtipoCriteriosTest(TestCase):
-    """Colaborador Externo: trocar a categoria (?tipo=...) troca o quadro."""
-
-    def setUp(self):
-        call_command("popular_criterios", verbosity=0)
-        self.candidato = Usuario.objects.create_user(
-            cpf="11144477735",
-            email="colab@test.com",
-            nome_completo="Colaborador Teste",
-            vinculo=Vinculo.COLABORADOR_EXTERNO,
-            password="senha123",
-        )
-        self.client.force_login(self.candidato)
-
-    def test_tipo_apoio_tecnico_mostra_quadro_ii(self):
-        from django.utils.html import escape
-        response = self.client.get(reverse("inscricao"), {"tipo": "apoio_tecnico"})
-        # item exclusivo do Quadro II (Apoio Técnico)
-        self.assertContains(response, escape("Experiência em comunicação científica"))
-        # item exclusivo do Quadro I (Pesquisador) não deve aparecer
-        self.assertNotContains(response, escape("Estágio pós-doutoramento"))
-
-    def test_tipo_pesquisador_mostra_quadro_i(self):
-        from django.utils.html import escape
-        response = self.client.get(reverse("inscricao"), {"tipo": "pesquisador"})
-        self.assertContains(response, escape("Estágio pós-doutoramento"))
-        self.assertNotContains(response, escape("Experiência em comunicação científica"))
-
-    def test_exibe_edital_colaborador_externo(self):
-        # candidato é Colaborador Externo → vê o edital 30/2026.
-        response = self.client.get(reverse("inscricao"))
-        self.assertContains(response, "46636-edital-proppg-n-30-2026")
-        self.assertNotContains(response, "46637-edital-proppg-n-31-2026")
-
-
-class InscricaoViewPostTest(TestCase):
-    def setUp(self):
-        call_command("popular_criterios", verbosity=0)
-        self.candidato = Usuario.objects.create_user(
-            cpf="11144477735",
-            email="candidato@test.com",
-            nome_completo="Candidato Teste",
-            vinculo=Vinculo.ESTUDANTE,
-            password="senha123",
-        )
-        self.client.force_login(self.candidato)
-        self.criterios = list(CriterioEdital.objects.filter(modalidade="estudante", ativo=True))
-
-    def _scores(self, valor="0"):
-        return {f"score_{c.pk}": valor for c in self.criterios}
-
-    def _pdf(self):
-        from django.core.files.uploadedfile import SimpleUploadedFile
-        return SimpleUploadedFile("comp.pdf", b"%PDF-1.4 ok", content_type="application/pdf")
-
-    def test_rascunho_cria_inscricao(self):
-        data = {"action": "rascunho", **self._scores("5")}
-        self.client.post(reverse("inscricao"), data)
-        self.assertTrue(Inscricao.objects.filter(usuario=self.candidato).exists())
-
-    def test_rascunho_salva_itens(self):
-        data = {"action": "rascunho", **self._scores("5")}
-        self.client.post(reverse("inscricao"), data)
-        inscricao = Inscricao.objects.get(usuario=self.candidato)
-        self.assertEqual(inscricao.itens.count(), len(self.criterios))
-
-    def test_rascunho_redireciona_para_formulario(self):
-        data = {"action": "rascunho", **self._scores("0")}
-        response = self.client.post(reverse("inscricao"), data)
-        self.assertRedirects(response, reverse("inscricao"))
-
-    def test_rascunho_idempotente_nao_duplica_itens(self):
-        data = {"action": "rascunho", **self._scores("3")}
-        self.client.post(reverse("inscricao"), data)
-        self.client.post(reverse("inscricao"), data)
-        inscricao = Inscricao.objects.get(usuario=self.candidato)
-        self.assertEqual(inscricao.itens.count(), len(self.criterios))
-
-    def test_rascunho_registra_auditlog(self):
-        from apps.auditoria.models import AuditAction, AuditLog
-        data = {"action": "rascunho", **self._scores("0")}
-        self.client.post(reverse("inscricao"), data)
-        self.assertTrue(AuditLog.objects.filter(acao=AuditAction.INSCRICAO_SALVA).exists())
-
-    def test_enviar_define_enviada_em(self):
-        data = {"action": "enviar", "aceite_envio": True, "comprovantes_pdf": self._pdf(), **self._scores("0")}
-        self.client.post(reverse("inscricao"), data)
-        inscricao = Inscricao.objects.get(usuario=self.candidato)
-        self.assertIsNotNone(inscricao.enviada_em)
-
-    def test_enviar_status_em_analise(self):
-        data = {"action": "enviar", "aceite_envio": True, "comprovantes_pdf": self._pdf(), **self._scores("0")}
-        self.client.post(reverse("inscricao"), data)
-        inscricao = Inscricao.objects.get(usuario=self.candidato)
-        self.assertEqual(inscricao.status, StatusInscricao.EM_ANALISE)
-
-    def test_enviar_redireciona_para_confirmacao(self):
-        data = {"action": "enviar", "aceite_envio": True, "comprovantes_pdf": self._pdf(), **self._scores("0")}
-        response = self.client.post(reverse("inscricao"), data)
-        self.assertRedirects(response, reverse("inscricao_confirmacao"))
-
-    def test_enviar_sem_aceite_retorna_form_com_erro(self):
-        data = {"action": "enviar", "aceite_envio": False, "comprovantes_pdf": self._pdf(), **self._scores("0")}
-        response = self.client.post(reverse("inscricao"), data)
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "verdadeiros")
-
-    def test_enviar_sem_pdf_bloqueia(self):
-        data = {"action": "enviar", "aceite_envio": True, **self._scores("0")}
-        response = self.client.post(reverse("inscricao"), data)
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "anexar o PDF")
-        # Envio bloqueado: nada é salvo/enviado.
-        self.assertFalse(Inscricao.objects.filter(usuario=self.candidato).exists())
-
-    def test_enviar_com_pdf_ja_anexado_ok(self):
-        # Reenvio: já existe PDF guardado, não exige novo upload.
-        Inscricao.objects.create(
-            usuario=self.candidato,
-            modalidade="estudante",
-            status=StatusInscricao.PENDENTE,
-            comprovantes_pdf=self._pdf(),
-        )
-        data = {"action": "enviar", "aceite_envio": True, **self._scores("0")}
-        response = self.client.post(reverse("inscricao"), data)
-        self.assertRedirects(response, reverse("inscricao_confirmacao"))
-        inscricao = Inscricao.objects.get(usuario=self.candidato)
-        self.assertEqual(inscricao.status, StatusInscricao.EM_ANALISE)
-
-    def test_pontuacao_maxima_respeitada(self):
-        criterio = self.criterios[0]
-        data = {"action": "rascunho", **self._scores("0")}
-        data[f"score_{criterio.pk}"] = str(float(criterio.maximo) + 999)
-        self.client.post(reverse("inscricao"), data)
-        inscricao = Inscricao.objects.get(usuario=self.candidato)
-        item = inscricao.itens.get(criterio=criterio)
-        self.assertLessEqual(item.pontuacao, criterio.maximo)
-
-    def test_pdf_upload_salvo(self):
-        from django.core.files.uploadedfile import SimpleUploadedFile
-        pdf = SimpleUploadedFile("comp.pdf", b"%PDF-1.4 ok", content_type="application/pdf")
-        data = {"action": "rascunho", **self._scores("0")}
-        self.client.post(reverse("inscricao"), data, files={"comprovantes_pdf": pdf})
-        # POST via client.post passa files no segundo dict
-        data2 = {"action": "rascunho", **self._scores("0")}
-        self.client.post(reverse("inscricao"), {**data2, "comprovantes_pdf": pdf})
-        inscricao = Inscricao.objects.get(usuario=self.candidato)
-        self.assertTrue(bool(inscricao.comprovantes_pdf))
-
-
-class ConfirmacaoViewTest(TestCase):
-    def setUp(self):
-        call_command("popular_criterios", verbosity=0)
-        self.candidato = Usuario.objects.create_user(
-            cpf="11144477735",
-            email="candidato@test.com",
-            nome_completo="Candidato Teste",
-            vinculo=Vinculo.ESTUDANTE,
-            password="senha123",
-        )
-        self.client.force_login(self.candidato)
-
-    def test_sem_inscricao_redireciona(self):
-        response = self.client.get(reverse("inscricao_confirmacao"))
-        self.assertRedirects(response, reverse("inscricao"))
-
-    def test_com_inscricao_retorna_200(self):
-        Inscricao.objects.create(
-            usuario=self.candidato,
-            modalidade="estudante",
-            status=StatusInscricao.EM_ANALISE,
-            enviada_em=timezone.now(),
-            total=Decimal("20.00"),
-        )
-        response = self.client.get(reverse("inscricao_confirmacao"))
-        self.assertEqual(response.status_code, 200)
-
-    def test_exibe_nome_candidato(self):
-        Inscricao.objects.create(
-            usuario=self.candidato,
-            modalidade="estudante",
-            status=StatusInscricao.EM_ANALISE,
-            enviada_em=timezone.now(),
-            total=Decimal("20.00"),
-        )
-        response = self.client.get(reverse("inscricao_confirmacao"))
-        self.assertContains(response, "Candidato Teste")
-
-    def test_exibe_total(self):
-        Inscricao.objects.create(
-            usuario=self.candidato,
-            modalidade="estudante",
-            status=StatusInscricao.EM_ANALISE,
-            enviada_em=timezone.now(),
-            total=Decimal("42.50"),
-        )
-        response = self.client.get(reverse("inscricao_confirmacao"))
-        self.assertContains(response, "42,5")
-
-
 class InscricaoDownloadTest(TestCase):
     def setUp(self):
         self.staff_user = Usuario.objects.create_user(
@@ -601,6 +377,7 @@ class InscricaoDownloadTest(TestCase):
             password="senha123",
         )
         self.inscricao = Inscricao.objects.create(
+            chamada=chamada_de_teste(),
             usuario=self.candidato,
             modalidade="estudante",
             status=StatusInscricao.EM_ANALISE,
@@ -668,20 +445,22 @@ class SidebarInscricaoTest(TestCase):
         Command().handle(verbosity=0)
         self.client.force_login(self.user)
 
-    def test_formulario_tem_sidebar(self):
-        response = self.client.get(reverse("inscricao"))
+    def test_lista_de_chamadas_tem_sidebar(self):
+        response = self.client.get(reverse("chamadas"))
         self.assertContains(response, 'class="sidebar"')
 
-    def test_confirmacao_tem_sidebar(self):
-        from apps.inscricoes.models import Inscricao, StatusInscricao
+    def test_comprovante_tem_sidebar(self):
         from django.utils import timezone
+
+        from apps.inscricoes.models import Inscricao, StatusInscricao
         inscricao = Inscricao.objects.create(
+            chamada=chamada_de_teste(),
             usuario=self.user,
             modalidade="estudante",
             status=StatusInscricao.EM_ANALISE,
             enviada_em=timezone.now(),
         )
-        response = self.client.get(reverse("inscricao_confirmacao"))
+        response = self.client.get(reverse("inscricao_detalhe", args=[inscricao.pk]))
         self.assertContains(response, 'class="sidebar"')
 
 
@@ -695,6 +474,7 @@ class InscricaoNovoCamposTest(TestCase):
             password="Pass123!",
         )
         self.inscricao = Inscricao.objects.create(
+            chamada=chamada_de_teste(),
             usuario=self.usuario,
             modalidade="estudante",
         )
@@ -760,6 +540,7 @@ class RevisaoViewTest(TestCase):
             password="Cand123!",
         )
         self.inscricao = Inscricao.objects.create(
+            chamada=chamada_de_teste(),
             usuario=self.candidato,
             modalidade="estudante",
             status=StatusInscricao.EM_ANALISE,
@@ -887,6 +668,7 @@ class InscricaoAdminLinkRevisarTest(TestCase):
 
     def test_link_revisar_exibido_para_em_analise(self):
         inscricao = Inscricao.objects.create(
+            chamada=chamada_de_teste(),
             usuario=self.candidato,
             modalidade="estudante",
             status=StatusInscricao.EM_ANALISE,
@@ -898,6 +680,7 @@ class InscricaoAdminLinkRevisarTest(TestCase):
 
     def test_link_revisar_vazio_para_outros_status(self):
         inscricao = Inscricao.objects.create(
+            chamada=chamada_de_teste(),
             usuario=self.candidato,
             modalidade="estudante",
             status=StatusInscricao.PENDENTE,
@@ -920,6 +703,7 @@ class ExportarAprovadasCommandTest(TestCase):
             password="senha123",
         )
         Inscricao.objects.create(
+            chamada=chamada_de_teste(),
             usuario=aprovada,
             modalidade=Vinculo.SERVIDOR,
             tipo_servidor="pesquisador",
@@ -934,6 +718,7 @@ class ExportarAprovadasCommandTest(TestCase):
             password="senha123",
         )
         Inscricao.objects.create(
+            chamada=chamada_de_teste(),
             usuario=em_analise,
             modalidade=Vinculo.ESTUDANTE,
             status=StatusInscricao.EM_ANALISE,

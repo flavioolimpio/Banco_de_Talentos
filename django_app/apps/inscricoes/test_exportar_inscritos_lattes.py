@@ -14,6 +14,18 @@ from openpyxl import load_workbook
 from apps.inscricoes.models import Inscricao, StatusInscricao, TipoServidor
 from apps.usuarios.models import Usuario, Vinculo
 
+
+def chamada_de_teste(numero: int = 31):
+    """Chamada usada pelos testes que só precisam de uma inscrição válida.
+
+    Devolve a chamada de legado criada pela migration 0013 (29 = servidor,
+    30 = colaborador externo, 31 = estudante). Os testes abaixo exercitam o
+    fluxo antigo de inscrição, então é a chamada certa para eles.
+    """
+    from apps.inscricoes.models import ChamadaInterna
+
+    return ChamadaInterna.objects.get(numero=numero, ano=2026)
+
 CPFS_VALIDOS = ["52998224725", "15350946056", "11144477735", "86288366757"]
 
 
@@ -27,6 +39,7 @@ def _cria(cpf, nome, vinculo, tipo="", lattes=""):
         lattes=lattes,
     )
     return Inscricao.objects.create(
+        chamada=chamada_de_teste(),
         usuario=usuario,
         modalidade=vinculo,
         tipo_servidor=tipo,

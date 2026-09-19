@@ -80,13 +80,15 @@ def cadastro_view(request):
 
 @login_required
 def home_view(request):
-    from apps.inscricoes.models import Inscricao
-    inscricao = None
-    try:
-        inscricao = Inscricao.objects.get(usuario=request.user)
-    except Inscricao.DoesNotExist:
-        pass
-    return render(request, "usuarios/home.html", {"inscricao": inscricao})
+    # Import local para não criar dependência circular entre os apps usuarios
+    # e inscricoes na carga dos models.
+    from apps.inscricoes.views_chamadas import chamadas_abertas_para
+
+    return render(
+        request,
+        "usuarios/home.html",
+        {"chamadas_abertas": chamadas_abertas_para(request.user)},
+    )
 
 
 # Três abas, conforme os blocos A–G de

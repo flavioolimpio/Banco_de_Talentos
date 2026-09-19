@@ -1,0 +1,24 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Fora do prazo — Banco de Especialistas IFG{% endblock %}
+
+{% block page_content %}
+<div style="max-width:640px;margin:64px auto;padding:32px 24px;text-align:center">
+    <h1 style="color:#168241;font-size:24px;margin-bottom:12px">
+        Inscrições encerradas nesta chamada
+    </h1>
+    <p style="color:#202124;font-size:15px;line-height:1.7">
+        O prazo da {{ chamada.rotulo_curto }} terminou em
+        {{ chamada.encerramento|date:"d/m/Y \à\s H:i" }}.
+    </p>
+    <p style="color:#555;font-size:14px;line-height:1.7">
+        Não ter se inscrito nesta chamada não gera nenhum prejuízo à sua permanência no
+        Banco de Especialistas nem à participação em chamadas futuras (item 5.16 do Edital).
+    </p>
+    <p style="margin-top:24px">
+        <a href="{% url 'chamadas' %}" style="display:inline-block;background:#168241;color:#fff;font-size:14px;font-weight:600;padding:11px 22px;border-radius:8px;text-decoration:none">
+            Ver as chamadas abertas
+        </a>
+    </p>
+</div>
+{% endblock %}

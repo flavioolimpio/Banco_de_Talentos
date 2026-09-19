@@ -15,14 +15,15 @@
     border-radius: 10px;
     overflow: hidden;
 }
-/* object-position empurra o recorte para cima: a foto do Polo tem muito chão
-   na metade de baixo, e o prédio é o que interessa. */
+/* A foto do Polo é 4:3. Um max-height baixo cortaria o prédio; aqui a altura
+   é maior e o recorte fica levemente acima do centro, de modo que o céu, a
+   fachada e o pátio apareçam. */
 .home-banner img {
     width: 100%;
     display: block;
-    max-height: 420px;
+    max-height: 620px;
     object-fit: cover;
-    object-position: center 35%;
+    object-position: center 55%;
 }
 .home-title {
     font-size: 28px;
@@ -114,11 +115,7 @@
         <p class="home-subtitle">PD&amp;I e Extens&atilde;o Tecnol&oacute;gica</p>
         <p class="home-inst">Polo de Inova&ccedil;&atilde;o do IFG</p>
 
-        {% if inscricao and inscricao.enviada_em %}
-            <a href="{% url 'inscricao_confirmacao' %}" class="home-cta secondary">Ver minha inscri&ccedil;&atilde;o</a>
-        {% elif inscricoes_abertas %}
-            <a href="{% url 'inscricao' %}" class="home-cta">Fazer inscri&ccedil;&atilde;o</a>
-        {% endif %}
+        <a href="{% url 'chamadas' %}" class="home-cta secondary">Minhas inscri&ccedil;&otilde;es</a>
     </div>
 </div>
 
@@ -126,14 +123,25 @@
     <img src="{% static 'imagens/polo.jpg' %}" alt="Polo de Inova&ccedil;&atilde;o do IFG">
 </div>
 
-{# O grid .home-cards é reaproveitado: quando o model de Chamada Interna       #}
-{# existir, ele passa a renderizar uma chamada aberta por cartão.              #}
-{# Por enquanto só ocupa o lugar da antiga frase "Inscrições temporariamente   #}
-{# suspensas" — por isso a condição ainda é a flag global. Enquanto o fluxo    #}
-{# antigo de inscrição estiver no ar, mostrar os dois ao mesmo tempo (o botão  #}
-{# "Fazer inscrição" e o aviso de que não há chamada) seria contraditório.     #}
-{% if not inscricoes_abertas %}
+{# Um cartão por chamada interna aberta para o vínculo do candidato. O grid   #}
+{# .home-cards é o mesmo de antes — só trocou o conteúdo dos cartões.         #}
 <div class="home-cards">
+    {% for chamada in chamadas_abertas %}
+    <div class="home-card">
+        <p class="home-card-title">
+            Chamada Interna {{ chamada.numero|stringformat:"02d" }} &mdash; {{ chamada.titulo }}
+        </p>
+        <p class="home-card-desc">
+            {% if chamada.projeto %}{{ chamada.projeto }}<br>{% endif %}
+            Inscri&ccedil;&otilde;es at&eacute; {{ chamada.encerramento|date:"d/m/Y" }}
+        </p>
+        <a href="{% url 'inscricao_chamada' chamada.pk %}" class="home-cta" style="margin-top:12px">
+            Fazer inscri&ccedil;&atilde;o
+        </a>
+        <a href="{% url 'chamada_detalhe' chamada.pk %}" class="home-card-desc"
+           style="display:block;margin-top:8px">Ver as vagas</a>
+    </div>
+    {% empty %}
     <div class="home-card" style="grid-column:1/-1">
         <p class="home-card-title">Nenhuma chamada aberta no momento</p>
         <p class="home-card-desc">
@@ -142,6 +150,6 @@
             se tiver autorizado o envio em Meu Cadastro.
         </p>
     </div>
+    {% endfor %}
 </div>
-{% endif %}
 {% endblock %}

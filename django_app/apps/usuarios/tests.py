@@ -53,9 +53,9 @@ class HomeViewTest(TestCase):
         response = self.client.get(reverse("home"))
         self.assertEqual(response.status_code, 200)
 
-    def test_home_sem_inscricao_mostra_link_iniciar(self):
+    def test_home_aponta_para_minhas_inscricoes(self):
         response = self.client.get(reverse("home"))
-        self.assertContains(response, reverse("inscricao"))
+        self.assertContains(response, reverse("chamadas"))
 
 
     def test_home_exibe_foto_do_polo(self):
@@ -85,9 +85,9 @@ class SidebarTest(TestCase):
         response = self.client.get(reverse("home"))
         self.assertContains(response, 'class="sidebar"')
 
-    def test_home_tem_link_inscricao_na_sidebar(self):
+    def test_home_tem_link_de_inscricoes_na_sidebar(self):
         response = self.client.get(reverse("home"))
-        self.assertContains(response, reverse("inscricao"))
+        self.assertContains(response, reverse("chamadas"))
 
     def test_login_nao_tem_sidebar(self):
         self.client.logout()
@@ -212,11 +212,13 @@ class MeuCadastroViewTest(TestCase):
         response = self.client.get(reverse("meu_cadastro"))
         self.assertContains(response, "Dados Pessoais")
 
-    def test_aba_dados_tem_uf_e_cidade(self):
-        # A aba "Endereço" deixou de existir: UF e cidade subiram para "Dados".
+    def test_aba_dados_tem_estado_e_cidade(self):
+        # A aba "Endereço" deixou de existir: estado e cidade subiram para
+        # "Dados", e viraram selects encadeados.
         response = self.client.get(reverse("meu_cadastro") + "?aba=dados")
-        self.assertContains(response, "UF")
-        self.assertContains(response, "Cidade")
+        self.assertContains(response, 'name="uf"')
+        self.assertContains(response, 'name="cidade"')
+        self.assertContains(response, "Goiás (GO)")
 
     def test_link_antigo_de_endereco_cai_em_dados(self):
         response = self.client.get(reverse("meu_cadastro") + "?aba=endereco")
@@ -690,3 +692,76 @@ class GrandeAreaCnpqTest(TestCase):
         self.assertEqual(self.usuario.grande_area_cnpq, "3. Engenharias")
         self.usuario.cnpq_area = "1.06"
         self.assertEqual(self.usuario.grande_area_cnpq, "1. Ciências Exatas e da Terra")
+
+
+class EstadoCidadeTest(TestCase):
+    """Selects encadeados de estado -> cidade.
+
+    A lista de cidades é montada no servidor (o formulário funciona sem
+    JavaScript); o JS só troca a lista quando o estado muda.
+    """
+
+    def setUp(self):
+        self.usuario = Usuario.objects.create_user(
+            cpf="52998224725",
+            email="ufcidade@test.com",
+            nome_completo="UF Cidade Teste",
+            vinculo=Vinculo.SERVIDOR,
+            password="senha123",
+        )
+        self.client.force_login(self.usuario)
+
+    def test_cidade_vazia_quando_nao_ha_estado(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        form = MeuCadastroForm(instance=self.usuario)
+        self.assertEqual(
+            [valor for valor, _ in form.fields["cidade"].choices], [""]
+        )
+
+    def test_cidades_do_estado_salvo_vem_preenchidas(self):
+        from apps.usuarios.forms import MeuCadastroForm
+        self.usuario.uf = "GO"
+        self.usuario.save(update_fields=["uf"])
+        form = MeuCadastroForm(instance=self.usuario)
+        valores = [valor for valor, _ in form.fields["cidade"].choices]
+        self.assertIn("Anápolis", valores)
+        self.assertIn("Goiânia", valores)
+        self.assertNotIn("Campinas", valores)  # SP
+
+    def test_post_aceita_cidade_do_estado_recem_escolhido(self):
+        # Sem ler a UF do POST em _preparar_cidades, o Django recusaria a
+        # cidade por não constar das opções montadas a partir do valor antigo.
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=dados",
+            {
+                "nome_completo": "X",
+                "email": self.usuario.email,
+                "uf": "GO",
+                "cidade": "Anápolis",
+            },
+        )
+        self.usuario.refresh_from_db()
+        self.assertEqual(self.usuario.uf, "GO")
+        self.assertEqual(self.usuario.cidade, "Anápolis")
+
+    def test_post_recusa_cidade_de_outro_estado(self):
+        self.client.post(
+            reverse("meu_cadastro") + "?aba=dados",
+            {
+                "nome_completo": "X",
+                "email": self.usuario.email,
+                "uf": "GO",
+                "cidade": "Campinas",
+            },
+        )
+        self.usuario.refresh_from_db()
+        self.assertEqual(self.usuario.cidade, "")
+
+    def test_dataset_cobre_os_27_estados(self):
+        from apps.usuarios.municipios import UF_CHOICES, municipios_de, municipios_por_uf
+        self.assertEqual(len(UF_CHOICES), 27)
+        self.assertEqual(len(municipios_por_uf()), 27)
+        self.assertEqual(sum(len(v) for v in municipios_por_uf().values()), 5571)
+        self.assertEqual(municipios_de(""), [])
+        self.assertEqual(municipios_de("XX"), [])
+        self.assertIn("Itumbiara", municipios_de("go"))  # aceita minúscula

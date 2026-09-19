@@ -10,15 +10,114 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 
-from apps.inscricoes.models import CriterioEdital, Inscricao, InscricaoItem, StatusInscricao
+from apps.inscricoes.models import (
+    ChamadaInterna,
+    CriterioEdital,
+    Inscricao,
+    InscricaoItem,
+    OpcaoCriterio,
+    StatusInscricao,
+    Vaga,
+)
+
+
+class VagaInline(admin.TabularInline):
+    """Quadro 1 do Aviso — as posições ofertadas."""
+
+    model = Vaga
+    extra = 1
+    fields = ("ordem", "codigo", "funcao", "modalidade", "tipo_servidor",
+              "quantidade", "carga_horaria", "bolsa", "perfil")
+
+
+class CriterioEditalInline(admin.TabularInline):
+    """Quadro 2 do Aviso — o quadro de critérios DESTA chamada.
+
+    É aqui que a Coordenação do Projeto monta a avaliação curricular, sem
+    precisar de deploy (item 5.1, VI do Edital). Para critérios de escolha
+    (titulação, por exemplo), cadastre as opções em "Opções do critério"
+    depois de salvar a linha.
+    """
+
+    model = CriterioEdital
+    extra = 1
+    fields = ("ordem", "modalidade", "tipo_servidor", "item_id", "criterio",
+              "regra", "tipo", "pontos_por_unidade", "unidade_rotulo", "maximo", "ativo")
+    show_change_link = True
+
+
+@admin.register(ChamadaInterna)
+class ChamadaInternaAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "abertura", "encerramento", "publicada", "legado", "total_inscricoes")
+    list_filter = ("ano", "publicada", "legado")
+    search_fields = ("titulo", "projeto", "edital")
+    inlines = [VagaInline, CriterioEditalInline]
+    actions = ["duplicar_chamada"]
+
+    def total_inscricoes(self, obj):
+        return obj.inscricoes.count()
+    total_inscricoes.short_description = "Inscrições"
+
+    @admin.action(description="Duplicar chamada (com vagas e quadro de critérios)")
+    def duplicar_chamada(self, request, queryset):
+        """O fluxo real é "igual à anterior, menos alguns itens".
+
+        Sem isso, alguém redigita dez linhas de critério a cada chamada — e
+        erra. A cópia nasce despublicada, com número provisório, para o RH
+        ajustar antes de publicar.
+        """
+        criadas = 0
+        for original in queryset:
+            proximo = (
+                ChamadaInterna.objects.filter(ano=original.ano)
+                .order_by("-numero")
+                .first()
+            )
+            nova = ChamadaInterna.objects.create(
+                numero=(proximo.numero if proximo else 0) + 1,
+                ano=original.ano,
+                titulo=f"{original.titulo} (cópia)",
+                projeto=original.projeto,
+                edital=original.edital,
+                texto=original.texto,
+                abertura=original.abertura,
+                encerramento=original.encerramento,
+                publicada=False,
+            )
+            for vaga in original.vagas.all():
+                vaga.pk = None
+                vaga.chamada = nova
+                vaga.save()
+            for criterio in original.criterios.all():
+                opcoes = list(criterio.opcoes.all())
+                criterio.pk = None
+                criterio.chamada = nova
+                criterio.save()
+                for opcao in opcoes:
+                    opcao.pk = None
+                    opcao.criterio = criterio
+                    opcao.save()
+            criadas += 1
+        self.message_user(
+            request,
+            f"{criadas} chamada(s) duplicada(s), despublicadas e com numeração provisória.",
+            messages.SUCCESS,
+        )
+
+
+class OpcaoCriterioInline(admin.TabularInline):
+    model = OpcaoCriterio
+    extra = 2
+    fields = ("ordem", "rotulo", "pontos")
 
 
 @admin.register(CriterioEdital)
 class CriterioEditalAdmin(admin.ModelAdmin):
-    list_display = ("modalidade", "tipo_servidor", "ordem", "criterio", "maximo", "ativo")
-    list_filter = ("modalidade", "tipo_servidor", "ativo")
+    list_display = ("chamada", "modalidade", "tipo_servidor", "ordem", "criterio", "tipo", "maximo", "ativo")
+    list_filter = ("chamada", "modalidade", "tipo_servidor", "tipo", "ativo")
     search_fields = ("criterio", "regra", "item_id")
-    ordering = ("modalidade", "tipo_servidor", "ordem")
+    ordering = ("chamada", "modalidade", "tipo_servidor", "ordem")
+    inlines = [OpcaoCriterioInline]
 
 
 class InscricaoItemInline(admin.TabularInline):
