@@ -31,6 +31,10 @@ class Command(BaseCommand):
                         "criterio": item["criterio"],
                         "regra": item["regra"],
                         "maximo": item["maximo"],
+                        # is_api marca o critério preenchido automaticamente pela
+                        # API do IFGProduz. Sem esta linha o comando gravava o
+                        # padrão False, e o critério virava campo digitável.
+                        "is_api": item.get("is_api", False),
                         "ativo": True,
                     },
                 )

@@ -21,7 +21,14 @@ class QuadrosInscricaoTest(TestCase):
         self.assertIn("colaborador_externo", QUADROS_INSCRICAO)
 
     def test_quantidade_criterios_servidor(self):
-        self.assertEqual(len(QUADROS_INSCRICAO["servidor"]), 13)
+        # Quadro do Servidor após a revisão de 2026: 9 itens (o Apoio Técnico
+        # passou a usar este mesmo quadro — ver nota em quadros.py).
+        self.assertEqual(len(QUADROS_INSCRICAO["servidor"]), 9)
+
+    def test_quadro_servidor_apoio_tecnico_aposentado(self):
+        # A chave saiu de quadros.py na revisão dos quadros; os critérios
+        # antigos que restam no banco foram desativados pela migration 0009.
+        self.assertNotIn("servidor_apoio_tecnico", QUADROS_INSCRICAO)
 
     def test_quantidade_criterios_estudante(self):
         self.assertEqual(len(QUADROS_INSCRICAO["estudante"]), 8)
@@ -42,44 +49,74 @@ class QuadrosInscricaoTest(TestCase):
 
 
 class PopularCriteriosCommandTest(TestCase):
+    # Atenção: o banco de teste já nasce com os critérios criados pelas data
+    # migrations (0004, 0006, 0007) e com as desativações das migrations 0008
+    # e 0009. O `popular_criterios` é idempotente e, hoje, não cria nada novo —
+    # ele existe para repovoar a partir de quadros.py quando necessário.
+    # Por isso os totais abaixo são do banco migrado, não do tamanho do dict.
+    TOTAL_APOS_MIGRATIONS = 39
+
     def test_cria_criterios_servidor(self):
         call_command("popular_criterios", verbosity=0)
         self.assertEqual(
-            CriterioEdital.objects.filter(modalidade="servidor", tipo_servidor="").count(), 13
+            CriterioEdital.objects.filter(modalidade="servidor", tipo_servidor="").count(),
+            len(QUADROS_INSCRICAO["servidor"]),
         )
 
-    def test_cria_criterios_servidor_apoio_tecnico(self):
+    def test_servidor_apoio_tecnico_sem_criterio_ativo(self):
+        # Quadro aposentado: o que sobrou no banco está com ativo=False e não
+        # pode voltar a aparecer para o candidato.
         call_command("popular_criterios", verbosity=0)
         self.assertEqual(
-            CriterioEdital.objects.filter(modalidade="servidor", tipo_servidor="apoio_tecnico").count(), 8
+            CriterioEdital.objects.filter(
+                modalidade="servidor", tipo_servidor="apoio_tecnico", ativo=True
+            ).count(),
+            0,
         )
 
     def test_cria_criterios_estudante(self):
         call_command("popular_criterios", verbosity=0)
         self.assertEqual(
-            CriterioEdital.objects.filter(modalidade="estudante").count(), 8
+            CriterioEdital.objects.filter(modalidade="estudante").count(),
+            len(QUADROS_INSCRICAO["estudante"]),
         )
 
     def test_cria_criterios_colaborador_externo(self):
+        # Quadro I (Pesquisador) vem de quadros.py; o Quadro II (Apoio Técnico,
+        # 8 itens) existe só na migration 0007 e não é repovoado por aqui.
         call_command("popular_criterios", verbosity=0)
         self.assertEqual(
-            CriterioEdital.objects.filter(modalidade="colaborador_externo").count(), 9
+            CriterioEdital.objects.filter(
+                modalidade="colaborador_externo", tipo_servidor=""
+            ).count(),
+            len(QUADROS_INSCRICAO["colaborador_externo"]),
+        )
+        self.assertEqual(
+            CriterioEdital.objects.filter(
+                modalidade="colaborador_externo", tipo_servidor="apoio_tecnico"
+            ).count(),
+            8,
         )
 
-    def test_total_38_criterios(self):
+    def test_total_criterios(self):
         call_command("popular_criterios", verbosity=0)
-        self.assertEqual(CriterioEdital.objects.count(), 38)
+        self.assertEqual(CriterioEdital.objects.count(), self.TOTAL_APOS_MIGRATIONS)
 
     def test_idempotente_sem_duplicar(self):
         call_command("popular_criterios", verbosity=0)
         call_command("popular_criterios", verbosity=0)
-        self.assertEqual(CriterioEdital.objects.count(), 38)
+        self.assertEqual(CriterioEdital.objects.count(), self.TOTAL_APOS_MIGRATIONS)
 
     def test_campos_salvos_corretamente(self):
         call_command("popular_criterios", verbosity=0)
-        criterio = CriterioEdital.objects.get(modalidade="servidor", item_id="titulacao")
-        self.assertEqual(criterio.criterio, "Titulação")
+        # tipo_servidor="" é obrigatório no filtro: existe um "ifgproduz" homônimo
+        # em servidor/apoio_tecnico, criado pela migration 0007 e desativado pela 0009.
+        criterio = CriterioEdital.objects.get(
+            modalidade="servidor", tipo_servidor="", item_id="ifgproduz"
+        )
+        self.assertEqual(criterio.criterio, "Produção Acadêmica (IFGProduz)")
         self.assertEqual(float(criterio.maximo), 100.0)
+        self.assertTrue(criterio.is_api)
         self.assertTrue(criterio.ativo)
 
 
