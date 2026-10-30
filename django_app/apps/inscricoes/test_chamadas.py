@@ -38,6 +38,11 @@ def xml_novo(atualizado=None, nome="curriculo.xml", conteudo=None):
     return SimpleUploadedFile(nome, conteudo, content_type="text/xml")
 
 
+def pdf_novo(nome="matricula.pdf", conteudo=b"%PDF-1.4 declaracao de matricula"):
+    """PDF mínimo: declaração de matrícula e histórico do estudante (Edital 31, 5.4, c)."""
+    return SimpleUploadedFile(nome, conteudo, content_type="application/pdf")
+
+
 class BaseChamada(TestCase):
     def setUp(self):
         agora = timezone.now()
@@ -103,6 +108,7 @@ class BaseChamada(TestCase):
             "vaga": self.vaga.pk,
             "declara_disponibilidade": "on",
             "lattes_xml": xml_novo(),
+            "matricula_pdf": pdf_novo(),
         }
         dados.update(extra)
         return self.client.post(
@@ -736,3 +742,85 @@ class EmailsChamadaTest(BaseChamada):
         log = AuditLog.objects.filter(acao=AuditAction.CSV_EXPORTADO).latest("id")
         self.assertEqual(log.detalhes["comando"], "emails_chamada")
         self.assertEqual(log.detalhes["chamada"], self.chamada.pk)
+
+class QuadroAteCemPontosTest(TestCase):
+    """Anexo I, item 7.1: o quadro de cada Chamada soma no máximo 100 pontos."""
+
+    def setUp(self):
+        self.chamada = ChamadaInterna.objects.create(
+            numero=9, ano=2027, titulo="Quadro", abertura=timezone.now(),
+            encerramento=timezone.now() + timedelta(days=5),
+        )
+
+    def _formset(self, *maximos, chamada=None):
+        from django.forms import inlineformset_factory
+
+        from apps.inscricoes.admin import QuadroCriteriosFormSet
+
+        FormSet = inlineformset_factory(
+            ChamadaInterna, CriterioEdital, formset=QuadroCriteriosFormSet, extra=0,
+            fields=("ordem", "modalidade", "tipo_servidor", "item_id", "criterio", "regra", "maximo", "ativo"),
+        )
+        dados = {"criterios-TOTAL_FORMS": len(maximos), "criterios-INITIAL_FORMS": 0}
+        for i, maximo in enumerate(maximos):
+            dados.update({
+                f"criterios-{i}-ordem": i + 1, f"criterios-{i}-modalidade": Vinculo.ESTUDANTE,
+                f"criterios-{i}-item_id": f"item{i}", f"criterios-{i}-criterio": "Critério",
+                f"criterios-{i}-regra": "Regra", f"criterios-{i}-maximo": maximo,
+                f"criterios-{i}-ativo": "on",
+            })
+        return FormSet(dados, instance=chamada or self.chamada, prefix="criterios")
+
+    def test_aceita_ate_100(self):
+        self.assertTrue(self._formset("60", "40").is_valid())
+
+    def test_recusa_acima_de_100(self):
+        formset = self._formset("60", "50")
+        self.assertFalse(formset.is_valid())
+        self.assertIn("soma 110 pontos", formset.non_form_errors()[0])
+
+    def test_legado_fica_de_fora(self):
+        self.chamada.legado = True
+        self.chamada.save()
+        self.assertTrue(self._formset("200").is_valid())
+
+    def test_edicao_avulsa_conta_os_outros_criterios(self):
+        from apps.inscricoes.admin import CriterioEditalForm
+
+        CriterioEdital.objects.create(
+            chamada=self.chamada, modalidade=Vinculo.ESTUDANTE, item_id="a", ordem=1,
+            criterio="A", regra="A", maximo=Decimal("70"),
+        )
+        dados = {"chamada": self.chamada.pk, "modalidade": Vinculo.ESTUDANTE, "item_id": "b",
+                 "ordem": 2, "criterio": "B", "regra": "B", "tipo": TipoCriterio.CONTAGEM,
+                 "maximo": "40", "ativo": "on"}
+        self.assertFalse(CriterioEditalForm(dados).is_valid())
+        dados["maximo"] = "30"
+        self.assertTrue(CriterioEditalForm(dados).is_valid())
+
+
+class MatriculaEstudanteTest(BaseChamada):
+    """Edital 31, item 5.4, c: o estudante anexa a declaração de matrícula e o histórico."""
+
+    def test_envio_grava_o_pdf(self):
+        self._post()
+        inscricao = Inscricao.objects.get(usuario=self.usuario)
+        self.assertTrue(inscricao.comprovantes_pdf)
+        self.assertEqual(inscricao.comprovantes_pdf_nome_original, "matricula.pdf")
+
+    def test_estudante_nao_envia_sem_o_pdf(self):
+        dados = {"action": "enviar", "vaga": self.vaga.pk, "declara_disponibilidade": "on", "lattes_xml": xml_novo()}
+        resposta = self.client.post(reverse("inscricao_chamada", args=[self.chamada.pk]), dados)
+        self.assertContains(resposta, "Envie a declaração de matrícula")
+        self.assertFalse(Inscricao.objects.filter(usuario=self.usuario, enviada_em__isnull=False).exists())
+
+    def test_recusa_arquivo_que_nao_e_pdf(self):
+        resposta = self._post(matricula_pdf=pdf_novo(conteudo=b"nao sou pdf"))
+        self.assertContains(resposta, "não é um PDF válido")
+
+    def test_servidor_nao_ve_o_campo(self):
+        self.usuario.vinculo = Vinculo.SERVIDOR
+        completar_cadastro(self.usuario)  # o servidor exige campos que o estudante não tem
+        resposta = self.client.get(reverse("inscricao_chamada", args=[self.chamada.pk]))
+        self.assertContains(resposta, 'name="lattes_xml"')
+        self.assertNotContains(resposta, 'name="matricula_pdf"')

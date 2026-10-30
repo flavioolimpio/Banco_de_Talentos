@@ -70,6 +70,8 @@ def cadastro_view(request):
     if request.method == "POST" and form.is_valid():
         user = form.save(commit=False)
         user.registrar_aceite_lgpd(LGPD_TERMO_VERSAO_ATUAL, get_client_ip(request))
+        if form.cleaned_data.get("consentimento_verificacao_bases"):
+            user.confirmar_declaracao("consentimento_verificacao_bases")
         user.save()
         audit(request, AuditAction.CADASTRO_CRIADO, alvo=user, detalhes={"vinculo": user.vinculo})
         messages.success(request, "Cadastro realizado com sucesso. Faça login para continuar.")
@@ -109,12 +111,10 @@ _ABAS_CAMPOS = {
     "perfil": [],
 }
 
-_DECLARACOES_PERFIL = [
-    "ciencia_credenciamento",
-    "ciencia_comunicacoes",
-    "declaracao_veracidade",
-    "consentimento_verificacao_bases",
-]
+# O consentimento de verificação em bases passou para a tela de cadastro
+# inicial (23/09/2026). Continua em DECLARACOES_CADASTRO só para quem se
+# cadastrou antes: o template só mostra a caixa enquanto ela não foi marcada.
+# O colaborador externo não a firma (DECLARACOES_FORA_DO_VINCULO).
 
 
 @login_required
@@ -141,7 +141,7 @@ def meu_cadastro_view(request):
         update_fields = list(campos_aba)
         declaracoes_confirmadas = []
         if aba == "perfil":
-            for campo in _DECLARACOES_PERFIL:
+            for campo in instance.declaracoes_exigidas():
                 if request.POST.get(campo) == "on":
                     instance.confirmar_declaracao(campo)
                     update_fields += [campo, f"{campo}_em"]
@@ -168,6 +168,7 @@ def meu_cadastro_view(request):
         "aba": aba,
         "campos_aba": campos_aba,
         "cpf_formatado": cpf_formatado,
+        "declaracoes_exigidas": request.user.declaracoes_exigidas(),
     })
 
 

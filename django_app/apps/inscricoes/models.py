@@ -196,6 +196,35 @@ class Vaga(models.Model):
         return f"{self.codigo} — {self.funcao}"
 
 
+# Anexo I, item 7.1 (decisão de 28/10/2026): o quadro de cada Chamada soma no
+# máximo 100 pontos, então a Análise Curricular já sai na escala de 0 a 100,
+# sem conversão. Vale por modalidade/tipo de servidor, que é o quadro que o
+# candidato responde. Chamadas de legado ficam de fora.
+PONTUACAO_MAXIMA_QUADRO = Decimal("100")
+
+
+def erros_do_quadro(linhas) -> list[str]:
+    """Mensagens dos quadros que passam de 100 pontos.
+
+    `linhas` são tuplas (modalidade, tipo_servidor, maximo) dos critérios ativos.
+    """
+    somas = {}
+    for modalidade, tipo_servidor, maximo in linhas:
+        chave = (modalidade, tipo_servidor or "")
+        somas[chave] = somas.get(chave, Decimal("0")) + (maximo or Decimal("0"))
+    erros = []
+    for (modalidade, tipo_servidor), total in somas.items():
+        if total > PONTUACAO_MAXIMA_QUADRO:
+            rotulo = Vinculo(modalidade).label if modalidade in Vinculo.values else modalidade
+            if tipo_servidor:
+                rotulo += f" ({TipoServidor(tipo_servidor).label})"
+            erros.append(
+                f"O quadro de {rotulo} soma {total:g} pontos; o máximo é "
+                f"{PONTUACAO_MAXIMA_QUADRO:g} (Anexo I, item 7.1). Reduza a pontuação máxima dos critérios."
+            )
+    return erros
+
+
 class CriterioEdital(models.Model):
     """Uma linha do quadro de critérios — o Quadro 2 do Aviso (item 5.1, VI).
 
@@ -331,7 +360,7 @@ class Inscricao(models.Model):
     )
     # Item 5.8, III: cada licença à gestante/adotante usufruída no período
     # amplia em 2 anos a janela de recência de 5 anos. Declarado aqui e
-    # comprovado na etapa do item 6.3.
+    # comprovado quando a equipe de seleção solicitar (item 5.7.1).
     licencas_maternidade = models.PositiveSmallIntegerField(
         "licenças à gestante/adotante no período", default=0
     )

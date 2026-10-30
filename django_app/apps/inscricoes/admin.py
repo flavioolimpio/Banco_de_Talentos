@@ -4,7 +4,10 @@
 
 import csv
 
+from django import forms
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
+from django.forms.models import BaseInlineFormSet
 from django.http import HttpResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -18,6 +21,7 @@ from apps.inscricoes.models import (
     OpcaoCriterio,
     StatusInscricao,
     Vaga,
+    erros_do_quadro,
 )
 
 
@@ -30,16 +34,61 @@ class VagaInline(admin.TabularInline):
               "quantidade", "carga_horaria", "bolsa", "perfil")
 
 
+class QuadroCriteriosFormSet(BaseInlineFormSet):
+    """Recusa o quadro que soma mais de 100 pontos (Anexo I, item 7.1)."""
+
+    def clean(self):
+        super().clean()
+        if self.instance.legado:
+            return
+        linhas = [
+            (f.cleaned_data["modalidade"], f.cleaned_data.get("tipo_servidor"), f.cleaned_data.get("maximo"))
+            for f in self.forms
+            if f.cleaned_data.get("modalidade")
+            and f.cleaned_data.get("ativo")
+            and not f.cleaned_data.get("DELETE")
+        ]
+        erros = erros_do_quadro(linhas)
+        if erros:
+            raise ValidationError(erros)
+
+
+class CriterioEditalForm(forms.ModelForm):
+    """Mesma regra do quadro, para quem edita um critério fora da chamada."""
+
+    class Meta:
+        model = CriterioEdital
+        fields = "__all__"
+
+    def clean(self):
+        dados = super().clean()
+        chamada = dados.get("chamada")
+        if chamada is None or chamada.legado or not dados.get("ativo"):
+            return dados
+        modalidade, tipo_servidor = dados.get("modalidade"), dados.get("tipo_servidor") or ""
+        irmaos = CriterioEdital.objects.filter(
+            chamada=chamada, modalidade=modalidade, tipo_servidor=tipo_servidor, ativo=True,
+        ).exclude(pk=self.instance.pk)
+        linhas = [(c.modalidade, c.tipo_servidor, c.maximo) for c in irmaos]
+        linhas.append((modalidade, tipo_servidor, dados.get("maximo")))
+        erros = erros_do_quadro(linhas)
+        if erros:
+            raise ValidationError(erros)
+        return dados
+
+
 class CriterioEditalInline(admin.TabularInline):
     """Quadro 2 do Aviso — o quadro de critérios DESTA chamada.
 
     É aqui que a Coordenação do Projeto monta a avaliação curricular, sem
     precisar de deploy (item 5.1, VI do Edital). Para critérios de escolha
     (titulação, por exemplo), cadastre as opções em "Opções do critério"
-    depois de salvar a linha.
+    depois de salvar a linha. A soma das pontuações máximas de cada quadro
+    não passa de 100 (Anexo I, item 7.1).
     """
 
     model = CriterioEdital
+    formset = QuadroCriteriosFormSet
     extra = 1
     fields = ("ordem", "modalidade", "tipo_servidor", "item_id", "criterio",
               "regra", "tipo", "pontos_por_unidade", "unidade_rotulo", "maximo", "ativo")
@@ -113,6 +162,7 @@ class OpcaoCriterioInline(admin.TabularInline):
 
 @admin.register(CriterioEdital)
 class CriterioEditalAdmin(admin.ModelAdmin):
+    form = CriterioEditalForm
     list_display = ("chamada", "modalidade", "tipo_servidor", "ordem", "criterio", "tipo", "maximo", "ativo")
     list_filter = ("chamada", "modalidade", "tipo_servidor", "tipo", "ativo")
     search_fields = ("criterio", "regra", "item_id")

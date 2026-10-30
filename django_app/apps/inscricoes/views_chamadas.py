@@ -176,12 +176,13 @@ def inscricao_chamada(request, pk):
         if xml:
             inscricao.lattes_xml = xml
             inscricao.lattes_xml_nome_original = xml.name[:255]
-        pdf = form.cleaned_data.get("comprovantes_pdf")
+        # Estudante (Edital 31, item 5.4, c): declaração de matrícula e histórico.
+        pdf = form.cleaned_data.get("matricula_pdf")
         if pdf:
             inscricao.comprovantes_pdf = pdf
             inscricao.comprovantes_pdf_nome_original = pdf.name[:255]
             inscricao.comprovantes_pdf_tamanho = pdf.size
-            inscricao.comprovantes_pdf_mime = getattr(pdf, "content_type", "")[:120]
+            inscricao.comprovantes_pdf_mime = "application/pdf"
 
         if acao == "enviar":
             inscricao.status = StatusInscricao.EM_ANALISE

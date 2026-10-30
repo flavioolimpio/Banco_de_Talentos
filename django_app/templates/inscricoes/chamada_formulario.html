@@ -100,8 +100,7 @@
             <div class="ci-num">VAGA</div>
             <div class="ci-pergunta">{{ form.vaga.label }}</div>
             <p class="ci-regra">
-                Se você for selecionado(a) em mais de uma categoria no mesmo projeto,
-                deverá optar por uma antes do início das atividades (item 6.12).
+                Você concorre a uma única vaga nesta Chamada Interna.
             </p>
             {{ form.vaga }}
             <div class="ci-erros">{{ form.vaga.errors }}</div>
@@ -121,6 +120,23 @@
             {{ form.lattes_xml }}
             <div class="ci-erros">{{ form.lattes_xml.errors }}</div>
         </div>
+
+        {# ------------------------------- matrícula e histórico (só estudante) #}
+        {% if form.matricula_pdf %}
+        <div class="ci-card{% if form.matricula_pdf.errors %} erro{% endif %}">
+            <div class="ci-num">MATRÍCULA E HISTÓRICO</div>
+            <div class="ci-pergunta">{{ form.matricula_pdf.label }}</div>
+            <p class="ci-regra">{{ form.matricula_pdf.help_text }}</p>
+            {% if inscricao.comprovantes_pdf %}
+            <p class="ci-regra" style="color:#168241">
+                Já enviado: <strong>{{ inscricao.comprovantes_pdf_nome_original }}</strong>.
+                Enviar um arquivo novo substitui o anterior.
+            </p>
+            {% endif %}
+            {{ form.matricula_pdf }}
+            <div class="ci-erros">{{ form.matricula_pdf.errors }}</div>
+        </div>
+        {% endif %}
 
         {# -------------------------------------------------------- declaração #}
         <div class="ci-card">

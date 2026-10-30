@@ -76,6 +76,11 @@ DECLARACOES_CADASTRO = [
     "declaracao_veracidade",
     "consentimento_verificacao_bases",
 ]
+# O Edital 30 (colaboradores externos) não prevê verificação em bases internas
+# do IFG, que não tem dados de quem é de fora (decisão de 28/10/2026).
+DECLARACOES_FORA_DO_VINCULO = {
+    Vinculo.COLABORADOR_EXTERNO: {"consentimento_verificacao_bases"},
+}
 # Como cada pendência aparece para o candidato.
 ROTULOS_PENDENCIA = {
     "data_nascimento": "data de nascimento",
@@ -260,9 +265,14 @@ class Usuario(AbstractUser):
                 # Resumo do cadastro antigo, gravado antes da regra das
                 # 50 a 200 palavras: preenchido, mas fora do item 4.2 V.
                 faltam.append(ROTULOS_PENDENCIA["resumo"])
-        if not all(getattr(self, d) for d in DECLARACOES_CADASTRO):
+        if not all(getattr(self, d) for d in self.declaracoes_exigidas()):
             faltam.append("declarações (aba Declarações)")
         return faltam
+
+    def declaracoes_exigidas(self) -> list[str]:
+        """Declarações que o vínculo precisa firmar (itens 4.3 e 4.4 do seu Edital)."""
+        fora = DECLARACOES_FORA_DO_VINCULO.get(self.vinculo, set())
+        return [d for d in DECLARACOES_CADASTRO if d not in fora]
 
     def campos_cadastro_exigidos(self) -> list[str]:
         """Campos do formulário que o vínculo precisa preencher."""

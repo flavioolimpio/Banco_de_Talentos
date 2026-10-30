@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.templatetags.static import static
 from django.utils import timezone
 
-from apps.usuarios.models import Usuario, Vinculo, resumo_tem_tamanho_valido
+from apps.usuarios.models import DECLARACOES_FORA_DO_VINCULO, Usuario, Vinculo, resumo_tem_tamanho_valido
 from apps.usuarios.municipios import UF_CHOICES, municipios_de
 from apps.usuarios.validators import somente_digitos, validar_cpf
 
@@ -62,6 +62,14 @@ class CadastroUsuarioForm(forms.ModelForm):
     aceite_lgpd = forms.BooleanField(
         label="Declaro que li e concordo com o uso dos meus dados para fins de cadastro, seleção e comunicação do Banco de Especialistas do Polo de Inovação do IFG."
     )
+    # Fora do Meta.fields de propósito: o ModelForm gravaria o True sem a data,
+    # e confirmar_declaracao() — chamado na view — só grava a data se o campo
+    # ainda estiver False.
+    consentimento_verificacao_bases = forms.BooleanField(
+        label="Consinto com a verificação das informações prestadas em bases internas do IFG "
+              "(Lei nº 13.709/2018). Obrigatório para servidores(as) e estudantes.",
+        required=False,
+    )
 
     class Meta:
         model = Usuario
@@ -94,6 +102,11 @@ class CadastroUsuarioForm(forms.ModelForm):
         confirmar_senha = cleaned_data.get("confirmar_senha")
         if senha and confirmar_senha and senha != confirmar_senha:
             self.add_error("confirmar_senha", "As senhas não conferem.")
+        vinculo = cleaned_data.get("vinculo")
+        exige = "consentimento_verificacao_bases" not in DECLARACOES_FORA_DO_VINCULO.get(vinculo, set())
+        if vinculo and exige and not cleaned_data.get("consentimento_verificacao_bases"):
+            # Erro geral: o template não mostra erro de campo nas caixas de seleção.
+            self.add_error(None, "Para servidores(as) e estudantes, é obrigatório consentir com a verificação em bases internas do IFG.")
         return cleaned_data
 
     def save(self, commit=True):

@@ -16,6 +16,22 @@ from apps.usuarios.models import Vinculo
 
 MAX_PDF_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_XML_SIZE = 10 * 1024 * 1024  # 10 MB — currículo grande passa de 2 MB
+
+
+def validar_pdf(pdf):
+    """Extensão, tamanho (10 MB) e assinatura %PDF- — não confia no nome do arquivo."""
+    if not pdf:
+        return pdf
+    if Path(pdf.name).suffix.lower() != ".pdf":
+        raise ValidationError("Apenas arquivos com extensão .pdf são aceitos.")
+    if pdf.size > MAX_PDF_SIZE:
+        mb = pdf.size // 1024 // 1024
+        raise ValidationError(f"O arquivo não pode ter mais de 10 MB (atual: {mb} MB).")
+    header = pdf.read(5)
+    pdf.seek(0)
+    if header != b"%PDF-":
+        raise ValidationError("O arquivo não é um PDF válido.")
+    return pdf
 LATTES_VALIDADE_DIAS = 183  # 6 meses
 
 
@@ -45,19 +61,7 @@ class InscricaoForm(forms.Form):
         super().__init__(*args, **kwargs)
 
     def clean_comprovantes_pdf(self):
-        pdf = self.cleaned_data.get("comprovantes_pdf")
-        if not pdf:
-            return pdf
-        if Path(pdf.name).suffix.lower() != ".pdf":
-            raise ValidationError("Apenas arquivos com extensão .pdf são aceitos.")
-        if pdf.size > MAX_PDF_SIZE:
-            mb = pdf.size // 1024 // 1024
-            raise ValidationError(f"O arquivo não pode ter mais de 10 MB (atual: {mb} MB).")
-        header = pdf.read(5)
-        pdf.seek(0)
-        if header != b"%PDF-":
-            raise ValidationError("O arquivo não é um PDF válido.")
-        return pdf
+        return validar_pdf(self.cleaned_data.get("comprovantes_pdf"))
 
     def clean(self):
         cleaned_data = super().clean()
@@ -133,6 +137,18 @@ class InscricaoChamadaForm(forms.Form):
             "está dentro. O currículo deve ter sido atualizado nos últimos 6 meses."
         ),
     )
+    # Só para estudantes (Edital 31, item 5.4, c): o campo sai do formulário
+    # dos demais vínculos no __init__. Grava no comprovantes_pdf da inscrição.
+    matricula_pdf = forms.FileField(
+        label="Declaração de matrícula e histórico escolar (PDF)",
+        required=False,
+        widget=forms.ClearableFileInput(attrs={"accept": ".pdf"}),
+        help_text=(
+            "Arquivo único em PDF com a declaração de matrícula regular no semestre, "
+            "emitida pela instituição de ensino, e, se houver, o histórico escolar com "
+            "o CRE ou CRA, ainda que parcial. Máximo de 10 MB."
+        ),
+    )
     licencas_maternidade = forms.IntegerField(
         label="Licenças à gestante ou à adotante usufruídas no período",
         required=False,
@@ -140,8 +156,7 @@ class InscricaoChamadaForm(forms.Form):
         max_value=10,
         help_text=(
             "Cada licença amplia em 2 anos a janela de 5 anos dos critérios "
-            "(item 5.8, III). Deixe 0 se não se aplica. Será comprovada na "
-            "etapa de análise documental."
+            "(item 5.8, III). Deixe 0 se não se aplica."
         ),
     )
     declara_disponibilidade = forms.BooleanField(
@@ -159,6 +174,8 @@ class InscricaoChamadaForm(forms.Form):
         self.tem_xml = tem_xml
         self.tem_pdf = tem_pdf
         super().__init__(*args, **kwargs)
+        if getattr(usuario, "vinculo", None) != Vinculo.ESTUDANTE:
+            del self.fields["matricula_pdf"]
         if chamada is not None and usuario is not None:
             # Só as vagas compatíveis com o vínculo do candidato: estudante não
             # concorre a vaga de servidor.
@@ -196,6 +213,9 @@ class InscricaoChamadaForm(forms.Form):
             )
         return arquivo
 
+    def clean_matricula_pdf(self):
+        return validar_pdf(self.cleaned_data.get("matricula_pdf"))
+
     def clean_licencas_maternidade(self):
         return self.cleaned_data.get("licencas_maternidade") or 0
 
@@ -212,4 +232,7 @@ class InscricaoChamadaForm(forms.Form):
             self.add_error("declara_disponibilidade", "Declaração obrigatória para enviar.")
         if not cleaned_data.get("lattes_xml") and not self.tem_xml and "lattes_xml" not in self.errors:
             self.add_error("lattes_xml", "Envie o currículo Lattes em XML para concluir a inscrição.")
+        if ("matricula_pdf" in self.fields and not cleaned_data.get("matricula_pdf")
+                and not self.tem_pdf and "matricula_pdf" not in self.errors):
+            self.add_error("matricula_pdf", "Envie a declaração de matrícula (e o histórico, se houver) para concluir a inscrição.")
         return cleaned_data

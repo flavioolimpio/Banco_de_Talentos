@@ -350,6 +350,13 @@
                            style="font-size:12px;color:#168241;text-decoration:none;font-weight:600">
                             &#11015; Baixar PDF
                         </a>
+                        {% if inscricao.lattes_xml %}
+                        &nbsp;·&nbsp;
+                        <a href="{% url 'download_lattes_xml' inscricao.pk %}"
+                           style="font-size:12px;color:#168241;text-decoration:none;font-weight:600">
+                            &#11015; Baixar o XML
+                        </a>
+                        {% endif %}
                     </div>
                     <iframe src="{% url 'view_comprovante' inscricao.pk %}"
                             title="Comprovante PDF de {{ inscricao.usuario.nome_completo }}">

@@ -75,7 +75,7 @@
                           background:#f7f9f6;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer">
                 <input type="checkbox" name="ciencia_comunicacoes" style="margin-top:3px;flex-shrink:0;width:16px;height:16px"
                        {% if request.user.ciencia_comunicacoes %}checked disabled{% endif %}>
-                <span style="text-align:justify;font-size:13px;line-height:1.6;color:#333">Tenho ciência de que receberei, no e-mail informado neste cadastro, a divulgação das vagas abertas pelo Polo de Inovação. É minha responsabilidade manter o endereço atualizado (item 5.2.4 do Edital).</span>
+                <span style="text-align:justify;font-size:13px;line-height:1.6;color:#333">Tenho ciência de que as Chamadas Internas são divulgadas na página oficial da PROPPG e neste Sistema do Banco de Especialistas, cabendo a mim acompanhá-las. O e-mail informado neste cadastro recebe apenas um aviso complementar, e a falha no seu recebimento não prorroga prazos (itens 5.2 a 5.2.4 do Edital).</span>
             </label>
             <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;margin-bottom:8px;
                           background:#f7f9f6;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer">
@@ -83,12 +83,15 @@
                        {% if request.user.declaracao_veracidade %}checked disabled{% endif %}>
                 <span style="text-align:justify;font-size:13px;line-height:1.6;color:#333">Declaro, sob as penas do art. 299 do Código Penal, que as informações prestadas são verdadeiras.</span>
             </label>
+            {# O consentimento passou para a tela de cadastro inicial. Só aparece  #}
+            {# aqui para quem se cadastrou antes da mudança e ainda não marcou.  #}
+            {% if "consentimento_verificacao_bases" in declaracoes_exigidas and not request.user.consentimento_verificacao_bases %}
             <label style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;
                           background:#f7f9f6;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer">
-                <input type="checkbox" name="consentimento_verificacao_bases" style="margin-top:3px;flex-shrink:0;width:16px;height:16px"
-                       {% if request.user.consentimento_verificacao_bases %}checked disabled{% endif %}>
-                <span style="text-align:justify;font-size:13px;line-height:1.6;color:#333">Consinto com a verificação destas informações em bases internas do IFG (Lei nº 13.709/2018).</span>
+                <input type="checkbox" name="consentimento_verificacao_bases" style="margin-top:3px;flex-shrink:0;width:16px;height:16px">
+                <span style="text-align:justify;font-size:13px;line-height:1.6;color:#333">Consinto com a verificação das informações prestadas em bases internas do IFG (Lei nº 13.709/2018).</span>
             </label>
+            {% endif %}
         </div>
         {% endif %}
         <div style="margin-top:24px">

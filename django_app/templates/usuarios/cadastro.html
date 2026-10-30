@@ -12,7 +12,7 @@
         {% csrf_token %}
         {{ form.non_field_errors }}
         {% for field in form %}
-            {% if field.name == "aceite_lgpd" %}
+            {% if field.field.widget.input_type == "checkbox" %}
                 <label class="check-row">
                     {{ field }}
                     <span>{{ field.label }}</span>

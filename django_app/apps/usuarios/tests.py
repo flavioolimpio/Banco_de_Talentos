@@ -541,6 +541,23 @@ class MeuCadastroPerfilViewTest(TestCase):
         self.externo.refresh_from_db()
         self.assertTrue(self.externo.declaracao_veracidade)
 
+    def test_consentimento_so_aparece_para_quem_ainda_nao_deu(self):
+        self.client.force_login(self.servidor)
+        url = reverse("meu_cadastro") + "?aba=perfil"
+        self.assertContains(self.client.get(url), 'name="consentimento_verificacao_bases"')
+        self.servidor.confirmar_declaracao("consentimento_verificacao_bases")
+        self.servidor.save()
+        self.assertNotContains(self.client.get(url), 'name="consentimento_verificacao_bases"')
+
+    def test_externo_nao_firma_consentimento_de_bases(self):
+        """Edital 30: não há verificação em bases internas do IFG para o externo."""
+        self.client.force_login(self.externo)
+        url = reverse("meu_cadastro") + "?aba=perfil"
+        self.assertNotContains(self.client.get(url), 'name="consentimento_verificacao_bases"')
+        completar_cadastro(self.externo)
+        self.externo.consentimento_verificacao_bases = False
+        self.assertTrue(self.externo.perfil_completo)
+
     def test_post_perfil_grava_declaracao_com_timestamp(self):
         self.client.force_login(self.externo)
         self.client.post(
@@ -644,7 +661,8 @@ class CienciaComunicacoesTest(TestCase):
     def test_aparece_no_bloco_de_declaracoes(self):
         resposta = self.client.get(reverse("meu_cadastro") + "?aba=perfil")
         self.assertContains(resposta, 'name="ciencia_comunicacoes"')
-        self.assertContains(resposta, "receberei")
+        # A divulgação oficial é a publicação; o e-mail é aviso complementar.
+        self.assertContains(resposta, "aviso complementar")
 
     def test_entra_no_perfil_completo(self):
         preencher_campos_cadastro(self.usuario)
@@ -747,6 +765,51 @@ class EstadoCidadeTest(TestCase):
         self.assertEqual(municipios_de(""), [])
         self.assertEqual(municipios_de("XX"), [])
         self.assertIn("Itumbiara", municipios_de("go"))  # aceita minúscula
+
+
+class CadastroInicialConsentimentoTest(TestCase):
+    """O consentimento de verificação em bases (LGPD) passou para a tela de
+    cadastro inicial, ao lado do aceite do termo, em 23/09/2026."""
+
+    def _dados(self, **extra):
+        dados = {
+            "vinculo": Vinculo.COLABORADOR_EXTERNO,
+            "nome_completo": "Nova Pessoa",
+            "email": "nova@test.com",
+            "cpf": "11144477735",
+            "telefone": "",
+            "lattes": "",
+            "senha": "Senha-forte-2026",
+            "confirmar_senha": "Senha-forte-2026",
+            "aceite_lgpd": "on",
+            "consentimento_verificacao_bases": "on",
+        }
+        dados.update(extra)
+        return dados
+
+    def test_tela_de_cadastro_mostra_o_consentimento(self):
+        resposta = self.client.get(reverse("cadastro"))
+        self.assertContains(resposta, 'name="consentimento_verificacao_bases"')
+
+    def test_cadastro_grava_consentimento_com_data(self):
+        resposta = self.client.post(reverse("cadastro"), self._dados())
+        self.assertEqual(resposta.status_code, 302)
+        usuario = Usuario.objects.get(cpf="11144477735")
+        self.assertTrue(usuario.consentimento_verificacao_bases)
+        self.assertIsNotNone(usuario.consentimento_verificacao_bases_em)
+
+    def test_cadastro_sem_consentimento_e_recusado(self):
+        dados = self._dados(vinculo=Vinculo.SERVIDOR)
+        del dados["consentimento_verificacao_bases"]
+        resposta = self.client.post(reverse("cadastro"), dados)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertFalse(Usuario.objects.filter(cpf="11144477735").exists())
+
+    def test_externo_se_cadastra_sem_consentimento(self):
+        dados = self._dados()
+        del dados["consentimento_verificacao_bases"]
+        self.assertEqual(self.client.post(reverse("cadastro"), dados).status_code, 302)
+        self.assertFalse(Usuario.objects.get(cpf="11144477735").consentimento_verificacao_bases)
 
 
 class CadastroCompletoPorVinculoTest(TestCase):
