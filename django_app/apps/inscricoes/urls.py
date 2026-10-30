@@ -25,6 +25,7 @@ urlpatterns = [
     path("inscricao/", views.inscricao_view, name="inscricao"),
     path("inscricao/confirmacao/", views.confirmacao_view, name="inscricao_confirmacao"),
     path("inscricoes/<int:pk>/comprovante/", views.download_comprovante, name="download_comprovante"),
+    path("inscricoes/<int:pk>/lattes.xml", views.download_lattes_xml, name="download_lattes_xml"),
     path("rh/inscricoes/<int:pk>/revisar/", views_rh.revisao_view, name="revisao_rh"),
     path("rh/inscricoes/<int:pk>/pdf/", views_rh.view_comprovante, name="view_comprovante"),
 ]

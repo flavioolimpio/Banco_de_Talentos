@@ -59,6 +59,17 @@ def comprovante_upload_to(instance: "Inscricao", filename: str) -> str:
     return f"comprovantes/{chamada}/{modalidade}/{cpf}/comprovantes{suffix}"
 
 
+def lattes_upload_to(instance: "Inscricao", filename: str) -> str:
+    """lattes/chamada-<id>/<modalidade>/<cpf>/curriculo.xml
+
+    Mesmo desenho de comprovante_upload_to. O XML do Lattes traz CPF, RG,
+    filiação e endereço residencial: fica em media/, fora do alcance do nginx,
+    e só sai pela view autenticada do RH.
+    """
+    chamada = f"chamada-{instance.chamada_id}" if instance.chamada_id else "legado"
+    return f"lattes/{chamada}/{instance.modalidade}/{instance.usuario.cpf}/curriculo.xml"
+
+
 class ChamadaInterna(models.Model):
     """Uma chamada interna (Aviso de Abertura de Vagas), item 5.1 do Edital 29.
 
@@ -360,6 +371,17 @@ class Inscricao(models.Model):
     comprovantes_pdf_nome_original = models.CharField(max_length=255, blank=True)
     comprovantes_pdf_tamanho = models.PositiveIntegerField(default=0)
     comprovantes_pdf_mime = models.CharField(max_length=120, blank=True)
+    # Desde 23/09/2026 a inscrição recebe o currículo Lattes em XML, e não
+    # mais o PDF de comprovantes (que fica só para as inscrições antigas). A
+    # pontuação é apurada pelo RH a partir do XML, com a skill
+    # lattes-xml-extrator, e lançada na tela de revisão.
+    lattes_xml = models.FileField(
+        "currículo Lattes (XML)",
+        upload_to=lattes_upload_to,
+        validators=[FileExtensionValidator(["xml"])],
+        blank=True,
+    )
+    lattes_xml_nome_original = models.CharField(max_length=255, blank=True)
     enviada_em = models.DateTimeField("enviada em", null=True, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)

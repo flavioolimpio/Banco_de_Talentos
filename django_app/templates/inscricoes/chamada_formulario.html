@@ -101,10 +101,10 @@
     {% endif %}
 
     <div class="ci-aviso info">
-        Responda cada item com o que você <strong>pode comprovar</strong>. A pontuação é
-        calculada automaticamente e só é consolidada depois da conferência dos documentos
-        (item 6.6). Salvo o item de titulação, conta o que ocorreu nos
-        <strong>últimos 5 anos</strong> (item 5.8).
+        A Análise Curricular é feita a partir do <strong>currículo Lattes em XML</strong> que você
+        enviar, conforme o quadro de critérios da chamada. Salvo a titulação, conta o que foi
+        registrado nos <strong>últimos 5 anos</strong> (item 5.8). Confira se o seu Lattes está
+        completo antes de exportar: o que não estiver nele não é pontuado.
     </div>
 
     <form method="post" enctype="multipart/form-data" novalidate>
@@ -123,77 +123,26 @@
             <div class="ci-erros">{{ form.vaga.errors }}</div>
         </div>
 
-        {# ------------------------------------------------ quadro de critérios #}
-        {% for p in perguntas %}
-        <div class="ci-card">
-            <div class="ci-num">CRITÉRIO {{ p.numero }} DE {{ perguntas|length }}</div>
-            <div class="ci-pergunta">{{ p.criterio.criterio }}</div>
-            <p class="ci-regra">
-                {{ p.criterio.regra }}<br>
-                <strong>Máximo:</strong> {{ p.criterio.maximo|floatformat:"-2" }} pontos
-            </p>
-
-            <div class="ci-resposta">
-                {% if p.e_escolha %}
-                <select name="opcao_{{ p.criterio.pk }}"
-                        data-pontua data-tipo="escolha">
-                    <option value="">Selecione</option>
-                    {% for opcao in p.criterio.opcoes.all %}
-                    <option value="{{ opcao.pk }}"
-                            data-pontos="{{ opcao.pontos|stringformat:'.2f' }}"
-                            {% if p.opcao_id == opcao.pk %}selected{% endif %}>
-                        {{ opcao.rotulo }}
-                    </option>
-                    {% endfor %}
-                </select>
-                {% else %}
-                <label for="qtd_{{ p.criterio.pk }}" style="font-size:14px;color:#333">
-                    {{ p.criterio.pergunta }}
-                </label>
-                <input type="number" id="qtd_{{ p.criterio.pk }}"
-                       name="qtd_{{ p.criterio.pk }}" min="0" step="1"
-                       value="{{ p.quantidade }}"
-                       data-pontua data-tipo="contagem"
-                       data-por-unidade="{{ p.criterio.pontos_por_unidade|default:0|stringformat:'.2f' }}">
-                {% endif %}
-                <span class="ci-pontos"
-                      data-pontos-de="{{ p.criterio.pk }}"
-                      data-maximo="{{ p.criterio.maximo|stringformat:'.2f' }}">
-                    {{ p.pontos|floatformat:"-2" }} pontos
-                </span>
-            </div>
-        </div>
-        {% empty %}
-        <div class="ci-card">
-            <div class="ci-pergunta">Quadro de critérios em preparação</div>
-            <p class="ci-regra">
-                A Coordenação do Projeto ainda não publicou os critérios de avaliação
-                curricular desta chamada para o seu vínculo. Tente novamente mais tarde.
-            </p>
-        </div>
-        {% endfor %}
-
-        {# ------------------------------------------------------- comprovantes #}
-        <div class="ci-card{% if form.comprovantes_pdf.errors %} erro{% endif %}">
-            <div class="ci-num">COMPROVANTES</div>
-            <div class="ci-pergunta">{{ form.comprovantes_pdf.label }}</div>
-            <p class="ci-regra">{{ form.comprovantes_pdf.help_text }}</p>
-            {% if inscricao.comprovantes_pdf %}
+        {# ------------------------------------------------------ currículo Lattes #}
+        <div class="ci-card{% if form.lattes_xml.errors %} erro{% endif %}">
+            <div class="ci-num">CURRÍCULO LATTES</div>
+            <div class="ci-pergunta">{{ form.lattes_xml.label }}</div>
+            <p class="ci-regra">{{ form.lattes_xml.help_text }}</p>
+            {% if inscricao.lattes_xml %}
             <p class="ci-regra" style="color:#168241">
-                Já enviado: <strong>{{ inscricao.comprovantes_pdf_nome_original }}</strong>.
-                Anexar um arquivo novo substitui o anterior.
+                Já enviado: <strong>{{ inscricao.lattes_xml_nome_original }}</strong>.
+                Enviar um arquivo novo substitui o anterior.
             </p>
             {% endif %}
-            {{ form.comprovantes_pdf }}
-            <div class="ci-erros">{{ form.comprovantes_pdf.errors }}</div>
+            {{ form.lattes_xml }}
+            <div class="ci-erros">{{ form.lattes_xml.errors }}</div>
         </div>
 
-        {# -------------------------------------------------------- declarações #}
+        {# -------------------------------------------------------- declaração #}
         <div class="ci-card">
-            <div class="ci-num">DECLARAÇÕES</div>
-            <div class="ci-pergunta">Firmadas no próprio formulário (item 5.6)</div>
+            <div class="ci-num">DISPONIBILIDADE</div>
 
-            <div class="ci-campo" style="margin-top:14px">
+            <div class="ci-campo" style="margin-top:6px">
                 <label class="titulo" for="{{ form.licencas_maternidade.id_for_label }}">
                     {{ form.licencas_maternidade.label }}
                 </label>
@@ -207,27 +156,11 @@
                 <span>{{ form.declara_disponibilidade.label }}</span>
             </label>
             <div class="ci-erros">{{ form.declara_disponibilidade.errors }}</div>
-
-            <label class="ci-decl" for="{{ form.declara_nao_redistribuicao.id_for_label }}">
-                {{ form.declara_nao_redistribuicao }}
-                <span>{{ form.declara_nao_redistribuicao.label }}</span>
-            </label>
-            <div class="ci-erros">{{ form.declara_nao_redistribuicao.errors }}</div>
-
-            <label class="ci-decl" for="{{ form.aceite_envio.id_for_label }}">
-                {{ form.aceite_envio }}
-                <span>{{ form.aceite_envio.label }}</span>
-            </label>
-            <div class="ci-erros">{{ form.aceite_envio.errors }}</div>
         </div>
 
         <div class="ci-total">
-            <div>
-                <div style="font-size:12px;color:#888">Pontuação declarada</div>
-                <div class="ci-total-num"><span id="ci-total">{{ total|floatformat:"-2" }}</span> pontos</div>
-                <div style="font-size:11px;color:#999;margin-top:2px">
-                    Sujeita à conferência dos comprovantes.
-                </div>
+            <div style="font-size:12px;color:#888">
+                Você pode salvar e voltar depois, até o fim do prazo.
             </div>
             <div class="ci-botoes">
                 <button type="submit" name="action" value="rascunho" class="ci-btn secundario">
@@ -240,6 +173,4 @@
         </div>
     </form>
 </div>
-
-<script src="{% static 'js/chamada_form.js' %}"></script>
 {% endblock %}

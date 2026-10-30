@@ -354,6 +354,14 @@
                     <iframe src="{% url 'view_comprovante' inscricao.pk %}"
                             title="Comprovante PDF de {{ inscricao.usuario.nome_completo }}">
                     </iframe>
+                {% elif inscricao.lattes_xml %}
+                    <div class="pdf-empty">
+                        Esta inscrição enviou o currículo Lattes em XML.<br>
+                        <a href="{% url 'download_lattes_xml' inscricao.pk %}"
+                           style="color:#168241;font-weight:600">&#11015; Baixar o XML</a><br>
+                        <span style="font-size:12px">Apure as quantidades com a skill lattes-xml-extrator
+                        (ou com <code>exportar_lattes_xml</code> para a chamada inteira) e lance ao lado.</span>
+                    </div>
                 {% else %}
                     <div class="pdf-empty">Nenhum PDF enviado.</div>
                 {% endif %}
@@ -376,7 +384,9 @@
                         </div>
                         <div class="criterio-campos">
 
-                            {# o que o candidato respondeu #}
+                            {# o que o candidato respondeu. Inscrição com XML do Lattes #}
+                            {# não tem resposta: o RH lança direto o que apurou.      #}
+                            {% if not inscricao.lattes_xml %}
                             <div class="campo-bloco">
                                 <span class="campo-label">Declarado</span>
                                 <div class="campo-candidato">
@@ -389,12 +399,15 @@
                                     </div>
                                 </div>
                             </div>
+                            {% endif %}
 
                             {# o que o RH valida #}
                             <div class="campo-bloco">
                                 <span class="campo-label">
                                     {% if linha.legado %}Validado
+                                    {% elif linha.e_escolha and inscricao.lattes_xml %}Op&ccedil;&atilde;o apurada no XML
                                     {% elif linha.e_escolha %}Confirme a op&ccedil;&atilde;o
+                                    {% elif inscricao.lattes_xml %}Quantidade apurada no XML
                                     {% else %}Confirme a quantidade{% endif %}
                                 </span>
 

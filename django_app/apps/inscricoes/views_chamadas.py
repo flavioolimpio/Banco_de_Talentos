@@ -7,13 +7,12 @@
 # Diferença para o fluxo antigo (views.py), que virou histórico:
 #   - o quadro de critérios é o DA CHAMADA, montado pela Coordenação do
 #     Projeto no admin, e não um quadro fixo por modalidade;
-#   - o candidato NÃO digita pontos. Ele responde uma quantidade ("quantos
-#     projetos?") ou escolhe uma opção (titulação), e o servidor calcula —
-#     ver CriterioEdital.pontuar();
+#   - o candidato NÃO digita pontos nem responde o quadro: desde 23/09/2026
+#     ele envia o currículo Lattes em XML. O RH apura as quantidades a partir
+#     do XML (skill lattes-xml-extrator) e as lança na revisão, onde o
+#     servidor calcula os pontos — ver CriterioEdital.pontuar();
 #   - existe uma inscrição por candidato POR chamada;
 #   - o prazo é o da chamada, não uma flag global.
-
-from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -28,9 +27,7 @@ from apps.inscricoes.models import (
     ChamadaInterna,
     Inscricao,
     InscricaoItem,
-    OpcaoCriterio,
     StatusInscricao,
-    TipoCriterio,
 )
 
 
@@ -69,57 +66,6 @@ def _criterios_da(chamada, usuario, tipo_servidor=""):
         .prefetch_related("opcoes")
         .order_by("ordem")
     )
-
-
-def _parse_respostas(post_data, criterios):
-    """Lê as respostas do POST e devolve {criterio_pk: (quantidade, opcao)}.
-
-    As perguntas não são campos de um Form porque variam por chamada: são
-    lidas direto do POST, como já era feito no fluxo antigo. Toda a conversão
-    para pontos acontece no servidor.
-    """
-    respostas = {}
-    for criterio in criterios:
-        if criterio.tipo == TipoCriterio.ESCOLHA:
-            bruto = post_data.get(f"opcao_{criterio.pk}", "").strip()
-            opcao = None
-            if bruto.isdigit():
-                # filter() em vez de get(): id de outro critério (ou inexistente)
-                # simplesmente não pontua, em vez de derrubar a página.
-                opcao = OpcaoCriterio.objects.filter(
-                    pk=int(bruto), criterio=criterio
-                ).first()
-            respostas[criterio.pk] = (0, opcao)
-        else:
-            bruto = post_data.get(f"qtd_{criterio.pk}", "").strip().replace(",", ".")
-            try:
-                quantidade = int(Decimal(bruto)) if bruto else 0
-            except (InvalidOperation, ValueError):
-                quantidade = 0
-            respostas[criterio.pk] = (max(0, quantidade), None)
-    return respostas
-
-
-def _montar_perguntas(criterios, respostas):
-    """Junta critério + resposta + pontos, na ordem, para o template."""
-    perguntas = []
-    total = Decimal("0")
-    for numero, criterio in enumerate(criterios, start=1):
-        quantidade, opcao = respostas.get(criterio.pk, (0, None))
-        pontos = criterio.pontuar(quantidade=quantidade, opcao=opcao)
-        total += pontos
-        perguntas.append(
-            {
-                "numero": numero,
-                "criterio": criterio,
-                "quantidade": quantidade,
-                "opcao": opcao,
-                "opcao_id": opcao.pk if opcao else None,
-                "pontos": pontos,
-                "e_escolha": criterio.tipo == TipoCriterio.ESCOLHA,
-            }
-        )
-    return perguntas, total
 
 
 @login_required
@@ -177,15 +123,7 @@ def inscricao_chamada(request, pk):
     if not chamada.aberta:
         return render(request, "inscricoes/chamada_fora_do_prazo.html", {"chamada": chamada})
 
-    tipo_servidor = inscricao.tipo_servidor if inscricao else ""
-    criterios = list(_criterios_da(chamada, usuario, tipo_servidor))
-
     if request.method == "GET":
-        respostas = {}
-        if inscricao:
-            for item in inscricao.itens.select_related("criterio", "opcao"):
-                respostas[item.criterio_id] = (item.quantidade, item.opcao)
-        perguntas, total = _montar_perguntas(criterios, respostas)
         form = InscricaoChamadaForm(
             chamada=chamada,
             usuario=usuario,
@@ -193,10 +131,9 @@ def inscricao_chamada(request, pk):
                 "vaga": inscricao.vaga_id if inscricao else None,
                 "licencas_maternidade": inscricao.licencas_maternidade if inscricao else 0,
                 "declara_disponibilidade": inscricao.declara_disponibilidade if inscricao else False,
-                "declara_nao_redistribuicao": inscricao.declara_nao_redistribuicao if inscricao else False,
             },
         )
-        return _render_formulario(request, chamada, form, perguntas, total, inscricao)
+        return _render_formulario(request, chamada, form, inscricao)
 
     # ------------------------------------------------------------------ POST
     acao = request.POST.get("action", "rascunho")
@@ -206,13 +143,12 @@ def inscricao_chamada(request, pk):
         chamada=chamada,
         usuario=usuario,
         acao=acao,
+        tem_xml=bool(inscricao and inscricao.lattes_xml),
         tem_pdf=bool(inscricao and inscricao.comprovantes_pdf),
     )
-    respostas = _parse_respostas(request.POST, criterios)
-    perguntas, total = _montar_perguntas(criterios, respostas)
 
     if not form.is_valid():
-        return _render_formulario(request, chamada, form, perguntas, total, inscricao)
+        return _render_formulario(request, chamada, form, inscricao)
 
     with transaction.atomic():
         if inscricao is None:
@@ -224,11 +160,11 @@ def inscricao_chamada(request, pk):
             inscricao.tipo_servidor = vaga.tipo_servidor
         inscricao.licencas_maternidade = form.cleaned_data.get("licencas_maternidade") or 0
         inscricao.declara_disponibilidade = bool(form.cleaned_data.get("declara_disponibilidade"))
-        inscricao.declara_nao_redistribuicao = bool(
-            form.cleaned_data.get("declara_nao_redistribuicao")
-        )
-        inscricao.total = total
 
+        xml = form.cleaned_data.get("lattes_xml")
+        if xml:
+            inscricao.lattes_xml = xml
+            inscricao.lattes_xml_nome_original = xml.name[:255]
         pdf = form.cleaned_data.get("comprovantes_pdf")
         if pdf:
             inscricao.comprovantes_pdf = pdf
@@ -243,22 +179,16 @@ def inscricao_chamada(request, pk):
             inscricao.status = StatusInscricao.PENDENTE
         inscricao.save()
 
-        pks_do_quadro = []
-        for pergunta in perguntas:
-            criterio = pergunta["criterio"]
-            pks_do_quadro.append(criterio.pk)
-            InscricaoItem.objects.update_or_create(
-                inscricao=inscricao,
-                criterio=criterio,
-                defaults={
-                    "quantidade": pergunta["quantidade"],
-                    "opcao": pergunta["opcao"],
-                    "pontuacao": pergunta["pontos"],
-                },
-            )
+        # Um item zerado por critério do quadro: é a folha que o RH preenche na
+        # revisão com as quantidades apuradas do XML. get_or_create, e não
+        # update_or_create, para um novo salvamento não apagar o que já
+        # estiver lá.
+        criterios = _criterios_da(chamada, usuario, inscricao.tipo_servidor)
+        for criterio in criterios:
+            InscricaoItem.objects.get_or_create(inscricao=inscricao, criterio=criterio)
         # Critério que saiu do quadro da chamada (o coordenador editou) não
         # pode continuar pontuando a inscrição.
-        inscricao.itens.exclude(criterio_id__in=pks_do_quadro).delete()
+        inscricao.itens.exclude(criterio__in=criterios).delete()
 
     AuditLog.objects.create(
         ator=usuario,
@@ -266,7 +196,7 @@ def inscricao_chamada(request, pk):
         acao=AuditAction.INSCRICAO_SALVA,
         ip=_get_client_ip(request),
         user_agent=request.META.get("HTTP_USER_AGENT", ""),
-        detalhes={"chamada": chamada.pk, "acao": acao, "total": str(total)},
+        detalhes={"chamada": chamada.pk, "acao": acao, "xml_enviado": bool(xml), "pdf_enviado": bool(pdf)},
     )
 
     if acao == "enviar":
@@ -276,15 +206,13 @@ def inscricao_chamada(request, pk):
     return redirect("inscricao_chamada", pk=chamada.pk)
 
 
-def _render_formulario(request, chamada, form, perguntas, total, inscricao):
+def _render_formulario(request, chamada, form, inscricao):
     return render(
         request,
         "inscricoes/chamada_formulario.html",
         {
             "chamada": chamada,
             "form": form,
-            "perguntas": perguntas,
-            "total": total,
             "inscricao": inscricao,
             "lattes_ausente": not request.user.lattes,
             "perfil_incompleto": not request.user.perfil_completo,

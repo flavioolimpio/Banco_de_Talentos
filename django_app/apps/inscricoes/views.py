@@ -183,3 +183,28 @@ def download_comprovante(request, pk):
         as_attachment=True,
         filename=inscricao.comprovantes_pdf_nome_original or "comprovantes.pdf",
     )
+
+
+@login_required
+def download_lattes_xml(request, pk):
+    # O XML do Lattes traz CPF, RG, filiação e endereço: só o RH baixa, e todo
+    # download fica no AuditLog. A ação reaproveita COMPROVANTE_DOWNLOAD; o
+    # campo "arquivo" distingue o XML do PDF.
+    if not request.user.is_staff:
+        raise PermissionDenied
+    inscricao = get_object_or_404(Inscricao, pk=pk)
+    if not inscricao.lattes_xml:
+        raise Http404("Esta inscrição não possui currículo Lattes em XML.")
+    AuditLog.objects.create(
+        ator=request.user,
+        alvo=inscricao.usuario,
+        acao=AuditAction.COMPROVANTE_DOWNLOAD,
+        ip=_get_client_ip(request),
+        user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        detalhes={"inscricao_id": pk, "arquivo": "lattes_xml"},
+    )
+    return FileResponse(
+        inscricao.lattes_xml.open("rb"),
+        as_attachment=True,
+        filename=f"lattes_inscricao_{pk}.xml",
+    )

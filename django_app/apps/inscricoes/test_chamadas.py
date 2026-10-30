@@ -24,11 +24,17 @@ from apps.inscricoes.models import (
 )
 from apps.usuarios.models import Usuario, Vinculo
 
-PDF = SimpleUploadedFile("comprovantes.pdf", b"%PDF-1.4 conteudo", content_type="application/pdf")
-
-
-def pdf_novo():
-    return SimpleUploadedFile("comprovantes.pdf", b"%PDF-1.4 conteudo", content_type="application/pdf")
+def xml_novo(atualizado=None, nome="curriculo.xml", conteudo=None):
+    """Um currículo Lattes mínimo, atualizado hoje (ou na data pedida)."""
+    atualizado = atualizado or timezone.localdate()
+    if conteudo is None:
+        conteudo = (
+            '<?xml version="1.0" encoding="ISO-8859-1"?>'
+            f'<CURRICULO-VITAE NUMERO-IDENTIFICADOR="1234567890123456" '
+            f'DATA-ATUALIZACAO="{atualizado:%d%m%Y}"><DADOS-GERAIS NOME-COMPLETO="Candidata"/>'
+            "</CURRICULO-VITAE>"
+        ).encode("latin-1")
+    return SimpleUploadedFile(nome, conteudo, content_type="text/xml")
 
 
 class BaseChamada(TestCase):
@@ -93,12 +99,8 @@ class BaseChamada(TestCase):
         dados = {
             "action": "enviar",
             "vaga": self.vaga.pk,
-            f"qtd_{self.contagem.pk}": "2",
-            f"opcao_{self.escolha.pk}": self.doutorado.pk,
             "declara_disponibilidade": "on",
-            "declara_nao_redistribuicao": "on",
-            "aceite_envio": "on",
-            "comprovantes_pdf": pdf_novo(),
+            "lattes_xml": xml_novo(),
         }
         dados.update(extra)
         return self.client.post(
@@ -125,26 +127,16 @@ class PontuacaoCalculadaTest(BaseChamada):
     def test_escolha_sem_resposta_nao_pontua(self):
         self.assertEqual(self.escolha.pontuar(opcao=None), Decimal("0"))
 
-    def test_total_do_envio_e_calculado_no_servidor(self):
-        # O POST não manda pontuação nenhuma: 2 projetos (80) + Doutorado (100).
+    def test_envio_nao_pontua_ate_a_revisao(self):
+        # O candidato não responde o quadro: cada critério vira um item
+        # zerado, que o RH preenche com o que apurar do XML.
         self._post()
         inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
-        self.assertEqual(inscricao.total, Decimal("180"))
-
-    def test_quantidade_negativa_vira_zero(self):
-        self._post(**{f"qtd_{self.contagem.pk}": "-5"})
-        inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
-        item = inscricao.itens.get(criterio=self.contagem)
-        self.assertEqual(item.quantidade, 0)
-        self.assertEqual(item.pontuacao, Decimal("0"))
-
-    def test_opcao_de_outro_criterio_nao_pontua(self):
-        outro = OpcaoCriterio.objects.create(
-            criterio=self.contagem, rotulo="Intruso", pontos=Decimal("999")
+        self.assertEqual(inscricao.total, Decimal("0"))
+        self.assertEqual(
+            list(inscricao.itens.values_list("quantidade", "opcao", "pontuacao")),
+            [(0, None, Decimal("0")), (0, None, Decimal("0"))],
         )
-        self._post(**{f"opcao_{self.escolha.pk}": outro.pk})
-        inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
-        self.assertEqual(inscricao.itens.get(criterio=self.escolha).pontuacao, Decimal("0"))
 
 
 class EnvioDaInscricaoTest(BaseChamada):
@@ -155,23 +147,72 @@ class EnvioDaInscricaoTest(BaseChamada):
         self.assertIsNotNone(inscricao.enviada_em)
         self.assertEqual(inscricao.vaga, self.vaga)
         self.assertEqual(inscricao.itens.count(), 2)
+        self.assertTrue(inscricao.declara_disponibilidade)
+        self.assertEqual(inscricao.lattes_xml_nome_original, "curriculo.xml")
 
-    def test_rascunho_nao_exige_declaracoes(self):
+    def test_formulario_so_tem_xml_e_disponibilidade(self):
+        resposta = self.client.get(reverse("inscricao_chamada", args=[self.chamada.pk]))
+        self.assertContains(resposta, 'name="lattes_xml"')
+        self.assertContains(resposta, 'name="declara_disponibilidade"')
+        self.assertContains(resposta, 'name="licencas_maternidade"')
+        for fora in ("qtd_", "opcao_", "comprovantes_pdf", "declara_nao_redistribuicao",
+                     "aceite_envio", "art. 299"):
+            self.assertNotContains(resposta, fora)
+
+    def test_rascunho_nao_exige_nada(self):
         resposta = self.client.post(
-            reverse("inscricao_chamada", args=[self.chamada.pk]),
-            {"action": "rascunho", f"qtd_{self.contagem.pk}": "1"},
+            reverse("inscricao_chamada", args=[self.chamada.pk]), {"action": "rascunho"}
         )
         self.assertEqual(resposta.status_code, 302)
         inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
         self.assertEqual(inscricao.status, StatusInscricao.PENDENTE)
         self.assertIsNone(inscricao.enviada_em)
 
-    def test_envio_sem_declaracoes_e_recusado(self):
-        self._post(declara_disponibilidade="", declara_nao_redistribuicao="", aceite_envio="")
+    def test_envio_sem_declaracao_de_horas_e_recusado(self):
+        self._post(declara_disponibilidade="")
         self.assertFalse(Inscricao.objects.filter(usuario=self.usuario).exists())
 
-    def test_envio_sem_pdf_e_recusado(self):
-        self._post(comprovantes_pdf="")
+    def test_envio_sem_xml_e_recusado(self):
+        self._post(lattes_xml="")
+        self.assertFalse(Inscricao.objects.filter(usuario=self.usuario).exists())
+
+    def test_xml_do_rascunho_vale_para_o_envio(self):
+        self._post(action="rascunho")
+        resposta = self._post(lattes_xml="")
+        self.assertEqual(resposta.status_code, 302)
+        inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
+        self.assertEqual(inscricao.status, StatusInscricao.EM_ANALISE)
+
+    def test_zip_e_recusado(self):
+        resposta = self._post(lattes_xml=xml_novo(nome="CV_123.zip"))
+        self.assertContains(resposta, "extraia o .xml")
+        self.assertFalse(Inscricao.objects.filter(usuario=self.usuario).exists())
+
+    def test_xml_que_nao_e_lattes_e_recusado(self):
+        resposta = self._post(lattes_xml=xml_novo(conteudo=b"<planilha/>"))
+        self.assertContains(resposta, "não é um currículo Lattes")
+
+    def test_xml_com_entidade_e_recusado(self):
+        # Defesa contra "billion laughs" / entidade externa.
+        malicioso = (
+            b'<?xml version="1.0"?><!DOCTYPE CURRICULO-VITAE [<!ENTITY x SYSTEM "file:///etc/passwd">]>'
+            b'<CURRICULO-VITAE DATA-ATUALIZACAO="01012026">&x;</CURRICULO-VITAE>'
+        )
+        resposta = self._post(lattes_xml=xml_novo(conteudo=malicioso))
+        self.assertContains(resposta, "não é um currículo Lattes")
+
+    def test_xml_com_caractere_sujo_e_aceito(self):
+        # Defeito comum de exportação do Lattes: "&" solto e caractere de controle.
+        sujo = (
+            f'<CURRICULO-VITAE DATA-ATUALIZACAO="{timezone.localdate():%d%m%Y}">'
+            '<DADOS-GERAIS NOME-COMPLETO="P&D \x01"/></CURRICULO-VITAE>'
+        ).encode("latin-1")
+        self.assertEqual(self._post(lattes_xml=xml_novo(conteudo=sujo)).status_code, 302)
+
+    def test_curriculo_desatualizado_e_recusado(self):
+        antigo = timezone.localdate() - timedelta(days=200)
+        resposta = self._post(lattes_xml=xml_novo(atualizado=antigo))
+        self.assertContains(resposta, "há mais de 6 meses")
         self.assertFalse(Inscricao.objects.filter(usuario=self.usuario).exists())
 
     def test_licencas_maternidade_sao_registradas(self):
@@ -179,14 +220,15 @@ class EnvioDaInscricaoTest(BaseChamada):
         inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
         self.assertEqual(inscricao.licencas_maternidade, 2)
 
-    def test_pdf_vai_para_a_pasta_da_chamada(self):
+    def test_xml_vai_para_a_pasta_da_chamada(self):
         self._post()
         inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
-        self.assertIn(f"chamada-{self.chamada.pk}", inscricao.comprovantes_pdf.name)
+        self.assertIn(f"lattes/chamada-{self.chamada.pk}/", inscricao.lattes_xml.name)
 
     def test_reenvio_nao_duplica_itens(self):
         self._post()
-        self._post(**{f"qtd_{self.contagem.pk}": "1"})
+        Inscricao.objects.filter(usuario=self.usuario).update(status=StatusInscricao.PENDENTE)
+        self._post()
         inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
         self.assertEqual(inscricao.itens.count(), 2)
 
@@ -307,9 +349,11 @@ class QuadroSemVazamentoTest(BaseChamada):
             regra="não deve aparecer",
             maximo=Decimal("10"),
         )
-        resposta = self.client.get(reverse("inscricao_chamada", args=[self.chamada.pk]))
-        self.assertContains(resposta, "Participação em projeto de PD&amp;I")
-        self.assertNotContains(resposta, "Critério da chamada vizinha")
+        self._post()
+        inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
+        self.assertEqual(
+            set(inscricao.itens.values_list("criterio__chamada", flat=True)), {self.chamada.pk}
+        )
 
     def test_mesmo_item_id_pode_existir_em_duas_chamadas(self):
         # É o ganho da constraint nova: "titulacao" repete a cada chamada.
@@ -358,15 +402,14 @@ class LegadoSomenteLeituraTest(TestCase):
 
 
 class RevisaoRhTest(BaseChamada):
-    """O RH corrige a RESPOSTA do candidato; os pontos são recalculados.
+    """O RH lança as quantidades que apurou do XML; os pontos são calculados.
 
-    Ninguém digita pontuação dos dois lados — o mesmo CriterioEdital.pontuar()
-    vale para o candidato e para a banca.
+    Ninguém digita pontuação — vale o CriterioEdital.pontuar().
     """
 
     def setUp(self):
         super().setUp()
-        self._post()  # inscrição enviada: 2 projetos (80) + Doutorado (100)
+        self._post()  # inscrição enviada com o XML, itens zerados
         self.inscricao = Inscricao.objects.get(usuario=self.usuario, chamada=self.chamada)
         self.rh = Usuario.objects.create_superuser(
             cpf="11144477735",
@@ -395,16 +438,15 @@ class RevisaoRhTest(BaseChamada):
         self.assertEqual(self.inscricao.status, StatusInscricao.APROVADA)
         self.assertEqual(self.inscricao.total_validado, Decimal("180"))
 
-    def test_reduzir_a_quantidade_reduz_os_pontos(self):
-        # "dos 2 projetos declarados, só 1 está comprovado"
+    def test_quantidade_lancada_define_os_pontos(self):
         item_qtd = self.inscricao.itens.get(criterio=self.contagem)
         self._revisar(**{f"validado_qtd_{item_qtd.pk}": "1"})
         self.inscricao.refresh_from_db()
         self.assertEqual(self.inscricao.total_validado, Decimal("140"))  # 40 + 100
         item_qtd.refresh_from_db()
         self.assertEqual(item_qtd.pontuacao_validada, Decimal("40"))
-        # a resposta original do candidato não é sobrescrita
-        self.assertEqual(item_qtd.quantidade, 2)
+        # a revisão grava no campo validado, não na resposta
+        self.assertEqual(item_qtd.quantidade, 0)
 
     def test_trocar_a_opcao_troca_os_pontos(self):
         item_opc = self.inscricao.itens.get(criterio=self.escolha)
@@ -430,11 +472,39 @@ class RevisaoRhTest(BaseChamada):
         item_qtd.refresh_from_db()
         self.assertEqual(item_qtd.observacao_avaliacao, "Comprovante do projeto B ilegível.")
 
-    def test_tela_mostra_a_resposta_declarada(self):
+    def test_tela_aponta_para_o_xml(self):
         resposta = self.client.get(self.url)
-        self.assertContains(resposta, "Confirme a quantidade")
-        self.assertContains(resposta, "Confirme a op")
+        self.assertContains(resposta, reverse("download_lattes_xml", args=[self.inscricao.pk]))
+        self.assertContains(resposta, "Quantidade apurada no XML")
+        self.assertNotContains(resposta, "Declarado")
         self.assertNotContains(resposta, "IFGProduz")
+
+    def test_rh_baixa_o_xml_e_fica_no_auditlog(self):
+        from apps.auditoria.models import AuditLog
+
+        resposta = self.client.get(reverse("download_lattes_xml", args=[self.inscricao.pk]))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(b"CURRICULO-VITAE", b"".join(resposta.streaming_content))
+        log = AuditLog.objects.latest("id")
+        self.assertEqual(log.detalhes, {"inscricao_id": self.inscricao.pk, "arquivo": "lattes_xml"})
+
+    def test_candidato_nao_baixa_o_xml(self):
+        self.client.force_login(self.usuario)
+        resposta = self.client.get(reverse("download_lattes_xml", args=[self.inscricao.pk]))
+        self.assertEqual(resposta.status_code, 403)
+
+    def test_exportar_lattes_xml_copia_os_enviados(self):
+        import tempfile
+        from pathlib import Path
+
+        pasta = Path(tempfile.mkdtemp()) / "xmls"
+        call_command("exportar_lattes_xml", chamada=self.chamada.pk, saida=str(pasta), verbosity=0)
+        arquivos = [a.name for a in pasta.iterdir()]
+        self.assertEqual(arquivos, [f"insc{self.inscricao.pk}_candidata-teste.xml"])
+        self.assertNotIn(self.usuario.cpf, arquivos[0])
+        planilha = (pasta.parent / "xmls_inscricoes.csv").read_text(encoding="utf-8-sig")
+        self.assertIn(f"{arquivos[0]};{self.inscricao.pk};Candidata Teste;Pq 12;", planilha)
+        self.assertTrue(planilha.strip().endswith(";0"))  # licenças
 
 
 class RevisaoLegadoTest(TestCase):

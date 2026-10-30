@@ -38,6 +38,7 @@
                 </div>
                 {% endif %}
             </div>
+            {% if inscricao.e_legado %}
             <div style="text-align:right">
                 <div style="font-size:12px;color:#888;margin-bottom:2px">Pontuação declarada</div>
                 <div style="font-size:26px;font-weight:800;color:#202124">
@@ -45,11 +46,15 @@
                     <span style="font-size:14px;font-weight:400">pts</span>
                 </div>
             </div>
+            {% endif %}
         </div>
 
         <div style="font-size:12.5px;color:#666;line-height:1.7;margin-bottom:16px">
             <strong>Candidato(a):</strong> {{ inscricao.usuario.nome_completo }}
             ({{ inscricao.usuario.get_vinculo_display }})
+            {% if inscricao.lattes_xml %}
+            <br><strong>Currículo Lattes (XML):</strong> {{ inscricao.lattes_xml_nome_original }}
+            {% endif %}
             {% if inscricao.comprovantes_pdf %}
             <br><strong>Comprovantes:</strong> {{ inscricao.comprovantes_pdf_nome_original }}
             {% endif %}
@@ -60,6 +65,9 @@
             {% endif %}
         </div>
 
+        {# As respostas só existem nas inscrições antigas. Nas de hoje o quadro #}
+        {# é apurado pelo RH a partir do XML, depois do envio.               #}
+        {% if inscricao.e_legado %}
         <h3 style="margin:0 0 10px;font-size:15px;color:#202124">Respostas</h3>
         <table style="width:100%;border-collapse:collapse;font-size:13px">
             <thead>
@@ -87,6 +95,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% endif %}
     </div>
 
     {% if inscricao.status == "aprovada" %}

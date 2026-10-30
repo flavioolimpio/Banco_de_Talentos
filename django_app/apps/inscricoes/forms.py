@@ -1,16 +1,22 @@
 # apps/inscricoes/forms.py
 # Banco de Talentos — Polo de Inovação IFG
-# Formulário de inscrição: valida PDF, tipo_servidor e aceite de envio.
+# Formulários de inscrição: o antigo (PDF) e o da Chamada Interna (XML do Lattes).
 
+import re
+import xml.etree.ElementTree as ET
+from datetime import date
 from pathlib import Path
 
 from django import forms
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from apps.inscricoes.models import TipoServidor, Vaga
 from apps.usuarios.models import Vinculo
 
 MAX_PDF_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_XML_SIZE = 10 * 1024 * 1024  # 10 MB — currículo grande passa de 2 MB
+LATTES_VALIDADE_DIAS = 183  # 6 meses
 
 
 class InscricaoForm(forms.Form):
@@ -73,14 +79,42 @@ class InscricaoForm(forms.Form):
         return cleaned_data
 
 
+def ler_curriculo_lattes(conteudo: bytes):
+    """Devolve a raiz do XML do Lattes, ou None se não for um currículo legível.
+
+    Segurança: o arquivo vem do candidato. Recusamos qualquer declaração de
+    entidade (<!ENTITY), que é o que os ataques de XML usam ("billion laughs",
+    entidade externa lendo arquivo do servidor). O XML exportado pelo Lattes
+    não tem nenhuma. Sem isso, a proteção ficaria a cargo da versão da libexpat
+    instalada na VM.
+
+    Leitura tolerante, como na skill lattes-xml-extrator: há currículos
+    exportados com caractere de controle ou "&" solto que quebram o parser, e
+    recusá-los barraria candidatos por defeito do próprio Lattes.
+    """
+    if b"<!ENTITY" in conteudo:
+        return None
+    try:
+        return ET.fromstring(conteudo)
+    except ET.ParseError:
+        pass
+    texto = conteudo.decode("latin-1", errors="replace")
+    texto = re.sub(r"^<\?xml[^>]*\?>", "", texto.lstrip())
+    texto = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", texto)
+    texto = re.sub(r"&(?!#?\w+;)", "&amp;", texto)
+    try:
+        return ET.fromstring(texto)
+    except ET.ParseError:
+        return None
+
+
 class InscricaoChamadaForm(forms.Form):
     """Formulário de inscrição numa Chamada Interna.
 
-    É o "Google Forms" do candidato: os critérios não são campos declarados
-    aqui — eles variam de chamada para chamada e são lidos do POST em
-    views_chamadas._parse_respostas. O que fica aqui é o que vale para toda
-    chamada: a vaga pretendida, o PDF de comprovantes e as declarações que o
-    item 5.6, "b", manda firmar no próprio formulário.
+    Desde 23/09/2026 o candidato não responde mais o quadro de critérios nem
+    anexa comprovantes: envia o currículo Lattes em XML e declara a
+    disponibilidade de horas. A pontuação é apurada pelo RH a partir do XML
+    (skill lattes-xml-extrator) e lançada na tela de revisão.
     """
 
     vaga = forms.ModelChoiceField(
@@ -89,13 +123,14 @@ class InscricaoChamadaForm(forms.Form):
         empty_label="Selecione a vaga",
         required=False,
     )
-    comprovantes_pdf = forms.FileField(
-        label="PDF único dos comprovantes",
+    lattes_xml = forms.FileField(
+        label="Currículo Lattes em XML",
         required=False,
+        widget=forms.ClearableFileInput(attrs={"accept": ".xml"}),
         help_text=(
-            "Um único PDF com todos os comprovantes, na ordem dos critérios. "
-            "Máx. 10 MB. O currículo Lattes não vale como comprovante "
-            "(item 5.14 do Edital)."
+            "Na Plataforma Lattes, abra o seu currículo e use a opção de exportar "
+            "em XML. O Lattes baixa um arquivo .zip: extraia e envie o .xml que "
+            "está dentro. O currículo deve ter sido atualizado nos últimos 6 meses."
         ),
     )
     licencas_maternidade = forms.IntegerField(
@@ -114,24 +149,14 @@ class InscricaoChamadaForm(forms.Form):
         required=False,
         widget=forms.CheckboxInput(attrs={"style": "margin-top:3px;flex-shrink:0;width:16px;height:16px"}),
     )
-    declara_nao_redistribuicao = forms.BooleanField(
-        label="Declaro não estar em processo de redistribuição para outra instituição.",
-        required=False,
-        widget=forms.CheckboxInput(attrs={"style": "margin-top:3px;flex-shrink:0;width:16px;height:16px"}),
-    )
-    aceite_envio = forms.BooleanField(
-        label=(
-            "Declaro, sob as penas do art. 299 do Código Penal, que as informações "
-            "acima são verdadeiras e que possuo os comprovantes correspondentes."
-        ),
-        required=False,
-        widget=forms.CheckboxInput(attrs={"style": "margin-top:3px;flex-shrink:0;width:16px;height:16px"}),
-    )
 
-    def __init__(self, *args, chamada=None, usuario=None, acao=None, tem_pdf=False, **kwargs):
+    def __init__(self, *args, chamada=None, usuario=None, acao=None, tem_xml=False, tem_pdf=False, **kwargs):
         self.chamada = chamada
         self.usuario = usuario
         self.acao = acao
+        # A inscrição já tem um XML guardado (rascunho salvo antes): não exige
+        # um novo upload para enviar.
+        self.tem_xml = tem_xml
         self.tem_pdf = tem_pdf
         super().__init__(*args, **kwargs)
         if chamada is not None and usuario is not None:
@@ -141,7 +166,35 @@ class InscricaoChamadaForm(forms.Form):
                 modalidade=usuario.vinculo
             )
 
-    clean_comprovantes_pdf = InscricaoForm.clean_comprovantes_pdf
+    def clean_lattes_xml(self):
+        arquivo = self.cleaned_data.get("lattes_xml")
+        if not arquivo:
+            return arquivo
+        if Path(arquivo.name).suffix.lower() != ".xml":
+            raise ValidationError(
+                "Envie o arquivo .xml. Se o Lattes baixou um .zip, extraia o .xml "
+                "que está dentro dele."
+            )
+        if arquivo.size > MAX_XML_SIZE:
+            mb = arquivo.size // 1024 // 1024
+            raise ValidationError(f"O arquivo não pode ter mais de 10 MB (atual: {mb} MB).")
+        raiz = ler_curriculo_lattes(arquivo.read())
+        arquivo.seek(0)
+        if raiz is None or raiz.tag != "CURRICULO-VITAE":
+            raise ValidationError("O arquivo não é um currículo Lattes em XML.")
+        # Item 5.4.2 da proposta de Edital: atualizado nos 6 meses anteriores à
+        # inscrição, pela data que o próprio arquivo registra (DDMMAAAA).
+        bruto = raiz.get("DATA-ATUALIZACAO", "")
+        try:
+            atualizado = date(int(bruto[4:]), int(bruto[2:4]), int(bruto[:2]))
+        except ValueError:
+            raise ValidationError("O arquivo não traz a data de atualização do currículo.")
+        if (timezone.localdate() - atualizado).days > LATTES_VALIDADE_DIAS:
+            raise ValidationError(
+                f"Este currículo foi atualizado em {atualizado:%d/%m/%Y}, há mais de "
+                "6 meses. Atualize o Lattes e exporte o XML de novo."
+            )
+        return arquivo
 
     def clean_licencas_maternidade(self):
         return self.cleaned_data.get("licencas_maternidade") or 0
@@ -151,19 +204,12 @@ class InscricaoChamadaForm(forms.Form):
         if self.acao != "enviar":
             return cleaned_data
 
-        # As três declarações e o PDF só são exigidos no ENVIO. Salvar rascunho
-        # tem que funcionar com o formulário pela metade.
+        # Só exigidos no ENVIO. Salvar rascunho tem que funcionar com o
+        # formulário pela metade.
         if not cleaned_data.get("vaga") and self.fields["vaga"].queryset.exists():
             self.add_error("vaga", "Selecione a vaga a que deseja concorrer.")
         if not cleaned_data.get("declara_disponibilidade"):
             self.add_error("declara_disponibilidade", "Declaração obrigatória para enviar.")
-        if not cleaned_data.get("declara_nao_redistribuicao"):
-            self.add_error("declara_nao_redistribuicao", "Declaração obrigatória para enviar.")
-        if not cleaned_data.get("aceite_envio"):
-            self.add_error("aceite_envio", "Declaração obrigatória para enviar.")
-        if not cleaned_data.get("comprovantes_pdf") and not self.tem_pdf:
-            self.add_error(
-                "comprovantes_pdf",
-                "É necessário anexar o PDF de comprovantes para enviar a inscrição.",
-            )
+        if not cleaned_data.get("lattes_xml") and not self.tem_xml and "lattes_xml" not in self.errors:
+            self.add_error("lattes_xml", "Envie o currículo Lattes em XML para concluir a inscrição.")
         return cleaned_data
