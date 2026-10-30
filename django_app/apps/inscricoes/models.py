@@ -198,8 +198,10 @@ class Vaga(models.Model):
 
 # Anexo I (Edital 29: 7.1; 30: 6.1; 31: 8.1), decisão de 28/10/2026: o quadro
 # de cada Chamada soma no máximo 100 pontos, então a Análise Curricular já sai
-# na escala de 0 a 100, sem conversão. Vale por modalidade/tipo de servidor,
-# que é o quadro que o candidato responde. Chamadas de legado ficam de fora.
+# na escala de 0 a 100, sem conversão. Vale para o quadro que o candidato de
+# fato responde: os critérios gerais da modalidade (tipo de servidor em branco)
+# MAIS os do tipo dele (ver _criterios_da em views_chamadas.py). Chamadas de
+# legado ficam de fora.
 PONTUACAO_MAXIMA_QUADRO = Decimal("100")
 
 
@@ -207,17 +209,28 @@ def erros_do_quadro(linhas) -> list[str]:
     """Mensagens dos quadros que passam de 100 pontos.
 
     `linhas` são tuplas (modalidade, tipo_servidor, maximo) dos critérios ativos.
+    Para cada tipo de servidor presente na modalidade, soma os critérios gerais
+    com os desse tipo; sem critério específico, vale a soma dos gerais.
     """
-    somas = {}
+    gerais, por_tipo = {}, {}
     for modalidade, tipo_servidor, maximo in linhas:
-        chave = (modalidade, tipo_servidor or "")
-        somas[chave] = somas.get(chave, Decimal("0")) + (maximo or Decimal("0"))
+        valor = maximo or Decimal("0")
+        gerais[modalidade] = gerais.get(modalidade, Decimal("0"))
+        if tipo_servidor:
+            chave = (modalidade, tipo_servidor)
+            por_tipo[chave] = por_tipo.get(chave, Decimal("0")) + valor
+        else:
+            gerais[modalidade] += valor
+    quadros = {chave: gerais[chave[0]] + soma for chave, soma in por_tipo.items()}
+    for modalidade, soma in gerais.items():
+        if not any(m == modalidade for m, _ in por_tipo):
+            quadros[(modalidade, "")] = soma
     erros = []
-    for (modalidade, tipo_servidor), total in somas.items():
+    for (modalidade, tipo_servidor), total in quadros.items():
         if total > PONTUACAO_MAXIMA_QUADRO:
             rotulo = Vinculo(modalidade).label if modalidade in Vinculo.values else modalidade
             if tipo_servidor:
-                rotulo += f" ({TipoServidor(tipo_servidor).label})"
+                rotulo += f" ({TipoServidor(tipo_servidor).label}, critérios gerais incluídos)"
             erros.append(
                 f"O quadro de {rotulo} soma {total:g} pontos; o máximo é "
                 f"{PONTUACAO_MAXIMA_QUADRO:g} (Anexo I do Edital). Reduza a pontuação máxima dos critérios."

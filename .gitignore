@@ -9,6 +9,8 @@
 data/
 media/
 CHAMADAS_INTERNAS/
+# saída do exportar_lattes_xml: XMLs com CPF e RG
+lattes_chamada_*/
 *.db
 *.sqlite3
 *.csv

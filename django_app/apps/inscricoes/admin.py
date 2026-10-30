@@ -66,8 +66,9 @@ class CriterioEditalForm(forms.ModelForm):
         if chamada is None or chamada.legado or not dados.get("ativo"):
             return dados
         modalidade, tipo_servidor = dados.get("modalidade"), dados.get("tipo_servidor") or ""
+        # Todos os tipos da modalidade: o quadro de um tipo inclui os critérios gerais.
         irmaos = CriterioEdital.objects.filter(
-            chamada=chamada, modalidade=modalidade, tipo_servidor=tipo_servidor, ativo=True,
+            chamada=chamada, modalidade=modalidade, ativo=True,
         ).exclude(pk=self.instance.pk)
         linhas = [(c.modalidade, c.tipo_servidor, c.maximo) for c in irmaos]
         linhas.append((modalidade, tipo_servidor, dados.get("maximo")))

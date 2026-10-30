@@ -209,6 +209,28 @@ class EnvioDaInscricaoTest(BaseChamada):
         resposta = self._post(lattes_xml=xml_novo(conteudo=malicioso))
         self.assertContains(resposta, "não é um currículo Lattes")
 
+    def test_xml_utf16_com_entidade_e_recusado(self):
+        # Em UTF-16 cada letra vem com um byte nulo: a busca por b"<!ENTITY"
+        # não acha nada. Quem confere é o expat, que lê qualquer codificação.
+        malicioso = (
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            '<!DOCTYPE CURRICULO-VITAE [<!ENTITY x "xxxxxxxxxx">]>'
+            f'<CURRICULO-VITAE DATA-ATUALIZACAO="{timezone.localdate():%d%m%Y}">&x;</CURRICULO-VITAE>'
+        ).encode("utf-16")
+        self.assertNotIn(b"<!ENTITY", malicioso)
+        resposta = self._post(lattes_xml=xml_novo(conteudo=malicioso))
+        self.assertContains(resposta, "não é um currículo Lattes")
+        self.assertFalse(Inscricao.objects.filter(usuario=self.usuario).exists())
+
+    def test_xml_utf8_sem_dtd_e_aceito(self):
+        normal = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            f'<CURRICULO-VITAE NUMERO-IDENTIFICADOR="1234567890123456" '
+            f'DATA-ATUALIZACAO="{timezone.localdate():%d%m%Y}">'
+            '<DADOS-GERAIS NOME-COMPLETO="Conceição Araújo"/></CURRICULO-VITAE>'
+        ).encode("utf-8")
+        self.assertEqual(self._post(lattes_xml=xml_novo(conteudo=normal)).status_code, 302)
+
     def test_xml_com_caractere_sujo_e_aceito(self):
         # Defeito comum de exportação do Lattes: "&" solto e caractere de controle.
         sujo = (
@@ -473,8 +495,39 @@ class RevisaoRhTest(BaseChamada):
         self.assertEqual(self.inscricao.total_validado, Decimal("140"))  # 40 + 100
         item_qtd.refresh_from_db()
         self.assertEqual(item_qtd.pontuacao_validada, Decimal("40"))
-        # a revisão grava no campo validado, não na resposta
-        self.assertEqual(item_qtd.quantidade, 0)
+        # Com XML o candidato não responde o quadro: a quantidade apurada pelo
+        # RH fica gravada como resposta do item (registro para recurso).
+        self.assertEqual(item_qtd.quantidade, 1)
+
+    def test_reabrir_a_revisao_traz_o_apurado_e_mantem_o_total(self):
+        self._revisar()
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.total_validado, Decimal("180"))
+        item_opc = self.inscricao.itens.get(criterio=self.escolha)
+        self.assertEqual(item_opc.opcao, self.doutorado)
+
+        # Ação "Marcar como Em análise" do admin.
+        self.client.post(reverse("admin:inscricoes_inscricao_changelist"), {
+            "action": "marcar_em_analise", "_selected_action": [self.inscricao.pk],
+        })
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.status, StatusInscricao.EM_ANALISE)
+
+        item_qtd = self.inscricao.itens.get(criterio=self.contagem)
+        resposta = self.client.get(self.url)
+        itens = resposta.context["itens_com_score"]
+        self.assertEqual(itens[0]["validado_qtd"], 2)
+        self.assertEqual(itens[1]["validado_opcao_id"], str(self.doutorado.pk))
+
+        # Aprovar de novo reenviando o que a tela trouxe, sem mudar nada.
+        self.client.post(self.url, {
+            "acao": "aprovar", "parecer_geral": "ok",
+            f"validado_qtd_{item_qtd.pk}": str(itens[0]["validado_qtd"]),
+            f"validado_opcao_{item_opc.pk}": itens[1]["validado_opcao_id"],
+        })
+        self.inscricao.refresh_from_db()
+        self.assertEqual(self.inscricao.status, StatusInscricao.APROVADA)
+        self.assertEqual(self.inscricao.total_validado, Decimal("180"))
 
     def test_admin_nao_expoe_o_caminho_do_xml(self):
         # O caminho em /media/ contém o CPF; o acesso é pela view auditada.
@@ -810,6 +863,72 @@ class QuadroAteCemPontosTest(TestCase):
         self.assertFalse(CriterioEditalForm(dados).is_valid())
         dados["maximo"] = "30"
         self.assertTrue(CriterioEditalForm(dados).is_valid())
+
+
+class QuadroPorTipoDeServidorTest(TestCase):
+    """O servidor responde os critérios gerais MAIS os do tipo dele.
+
+    É essa soma que não passa de 100, não cada grupo isolado.
+    """
+
+    def setUp(self):
+        self.chamada = ChamadaInterna.objects.create(
+            numero=10, ano=2027, titulo="Quadro por tipo", abertura=timezone.now(),
+            encerramento=timezone.now() + timedelta(days=5),
+        )
+
+    def _erros(self, *linhas):
+        from apps.inscricoes.models import erros_do_quadro
+
+        return erros_do_quadro([(Vinculo.SERVIDOR, tipo, Decimal(m)) for tipo, m in linhas])
+
+    def _form(self, maximo):
+        from apps.inscricoes.admin import CriterioEditalForm
+        from apps.inscricoes.models import TipoServidor
+
+        return CriterioEditalForm({
+            "chamada": self.chamada.pk, "modalidade": Vinculo.SERVIDOR,
+            "tipo_servidor": TipoServidor.PESQUISADOR, "item_id": "pq", "ordem": 2,
+            "criterio": "Pq", "regra": "P", "tipo": TipoCriterio.CONTAGEM,
+            "maximo": maximo, "ativo": "on",
+        })
+
+    def _criterio_geral(self, maximo):
+        CriterioEdital.objects.create(
+            chamada=self.chamada, modalidade=Vinculo.SERVIDOR, item_id="geral", ordem=1,
+            criterio="Geral", regra="G", maximo=Decimal(maximo),
+        )
+
+    def test_gerais_mais_especificos_acima_de_100_e_recusado(self):
+        erros = self._erros(("", "60"), ("pesquisador", "60"))
+        self.assertEqual(len(erros), 1)
+        self.assertIn("soma 120 pontos", erros[0])
+        self.assertIn("Pesquisador(a)", erros[0])
+
+    def test_gerais_mais_especificos_ate_100_e_aceito(self):
+        self.assertEqual(self._erros(("", "40"), ("pesquisador", "60")), [])
+
+    def test_cada_tipo_soma_com_os_gerais(self):
+        erros = self._erros(("", "40"), ("pesquisador", "60"), ("apoio_tecnico", "70"))
+        self.assertEqual(len(erros), 1)
+        self.assertIn("Apoio técnico", erros[0])
+
+    def test_so_gerais_ate_100_e_aceito(self):
+        self.assertEqual(self._erros(("", "60"), ("", "40")), [])
+
+    def test_so_gerais_acima_de_100_e_recusado(self):
+        self.assertIn("soma 110 pontos", self._erros(("", "60"), ("", "50"))[0])
+
+    def test_edicao_avulsa_soma_os_gerais(self):
+        self._criterio_geral("60")
+        self.assertFalse(self._form("60").is_valid())
+        self.assertTrue(self._form("40").is_valid())
+
+    def test_legado_fica_de_fora(self):
+        self.chamada.legado = True
+        self.chamada.save()
+        self._criterio_geral("90")
+        self.assertTrue(self._form("90").is_valid())
 
 
 class MatriculaEstudanteTest(BaseChamada):

@@ -31,7 +31,10 @@ def _get_client_ip(request):
 
 
 def _validar_item(post_data, item):
-    """Converte a revisão do RH de um item em (pontos, observação).
+    """Converte a revisão do RH de um item em (pontos, observação, resposta).
+
+    `resposta` é o que o RH confirmou ({"quantidade": n} ou {"opcao": ...}),
+    ou {} no legado, onde não há resposta a guardar.
 
     Duas formas, conforme a origem do critério:
 
@@ -51,35 +54,35 @@ def _validar_item(post_data, item):
     if item.inscricao.e_legado:
         bruto = post_data.get(f"validado_{item.pk}", "").strip()
         if not bruto:
-            return item.pontuacao, obs
+            return item.pontuacao, obs, {}
         try:
             valor = Decimal(bruto.replace(",", "."))
         except InvalidOperation:
             valor = Decimal("0")
-        return max(Decimal("0"), min(valor, criterio.maximo)), obs
+        return max(Decimal("0"), min(valor, criterio.maximo)), obs, {}
 
     if criterio.tipo == TipoCriterio.ESCOLHA:
         bruto = post_data.get(f"validado_opcao_{item.pk}", "").strip()
         opcao = None
         if bruto.isdigit():
             opcao = OpcaoCriterio.objects.filter(pk=int(bruto), criterio=criterio).first()
-        return criterio.pontuar(opcao=opcao), obs
+        return criterio.pontuar(opcao=opcao), obs, {"opcao": opcao}
 
     bruto = post_data.get(f"validado_qtd_{item.pk}", "").strip()
     try:
         quantidade = max(0, int(Decimal(bruto))) if bruto else 0
     except (InvalidOperation, ValueError):
         quantidade = 0
-    return criterio.pontuar(quantidade=quantidade), obs
+    return criterio.pontuar(quantidade=quantidade), obs, {"quantidade": quantidade}
 
 
 def _parse_validacoes(post_data, itens):
-    """{item_pk: {"pontuacao_validada": ..., "observacao": ...}} + total."""
+    """{item_pk: {"pontuacao_validada", "observacao", "resposta"}} + total."""
     validacoes = {}
     total = Decimal("0.00")
     for item in itens:
-        pontos, obs = _validar_item(post_data, item)
-        validacoes[item.pk] = {"pontuacao_validada": pontos, "observacao": obs}
+        pontos, obs, resposta = _validar_item(post_data, item)
+        validacoes[item.pk] = {"pontuacao_validada": pontos, "observacao": obs, "resposta": resposta}
         total += pontos
     return validacoes, total
 
@@ -100,7 +103,8 @@ def _contexto_itens(itens, post_data=None):
             opcao_id = post_data.get(f"validado_opcao_{item.pk}", "")
             pontos_legado = post_data.get(f"validado_{item.pk}", "")
         else:
-            # Abertura da tela: o RH parte do que o candidato declarou e só
+            # Abertura da tela: o RH parte da resposta gravada — a do
+            # candidato ou, com XML, a que o próprio RH já apurou — e só
             # mexe no que precisar corrigir.
             qtd = item.quantidade
             opcao_id = item.opcao_id or ""
@@ -167,12 +171,23 @@ def revisao_view(request, pk):
 
     validacoes, total_validado = _parse_validacoes(request.POST, itens)
 
+    # Com o XML do Lattes o candidato não responde o quadro: a quantidade (ou
+    # opção) que o RH apurou vira a resposta do item. Fica registrada para
+    # recurso e volta preenchida se a inscrição for reaberta. Sem XML, a
+    # resposta é do candidato e não é sobrescrita.
+    grava_resposta = bool(inscricao.lattes_xml)
+
     with transaction.atomic():
         for item in itens:
             v = validacoes[item.pk]
             item.pontuacao_validada = v["pontuacao_validada"]
             item.observacao_avaliacao = v["observacao"]
-            item.save(update_fields=["pontuacao_validada", "observacao_avaliacao"])
+            campos = ["pontuacao_validada", "observacao_avaliacao"]
+            if grava_resposta:
+                for campo, valor in v["resposta"].items():
+                    setattr(item, campo, valor)
+                    campos.append(campo)
+            item.save(update_fields=campos)
 
         inscricao.total_validado = total_validado
         inscricao.parecer_geral = form.cleaned_data["parecer_geral"]

@@ -5,6 +5,7 @@
 import re
 import xml.etree.ElementTree as ET
 from datetime import date
+from xml.parsers import expat
 from pathlib import Path
 
 from django import forms
@@ -83,20 +84,47 @@ class InscricaoForm(forms.Form):
         return cleaned_data
 
 
+class _DtdRecusado(Exception):
+    pass
+
+
+def _declara_dtd(conteudo: bytes) -> bool:
+    """True se o XML traz <!DOCTYPE> ou <!ENTITY>, em qualquer codificação.
+
+    Quem lê é o próprio expat, que reconhece UTF-8, UTF-16 e Latin-1 pela
+    declaração/BOM; uma busca por bytes ("<!ENTITY") não pega UTF-16, onde
+    cada letra vem intercalada com um byte nulo. O handler interrompe a
+    leitura na abertura do DTD, antes de qualquer entidade ser expandida.
+    """
+    def recusar(*_args):
+        raise _DtdRecusado
+
+    leitor = expat.ParserCreate()
+    leitor.StartDoctypeDeclHandler = recusar
+    leitor.EntityDeclHandler = recusar
+    try:
+        leitor.Parse(conteudo, True)
+    except _DtdRecusado:
+        return True
+    except expat.ExpatError:
+        pass  # XML malformado: a leitura tolerante abaixo ainda confere o texto
+    return False
+
+
 def ler_curriculo_lattes(conteudo: bytes):
     """Devolve a raiz do XML do Lattes, ou None se não for um currículo legível.
 
-    Segurança: o arquivo vem do candidato. Recusamos qualquer declaração de
-    entidade (<!ENTITY), que é o que os ataques de XML usam ("billion laughs",
-    entidade externa lendo arquivo do servidor). O XML exportado pelo Lattes
-    não tem nenhuma. Sem isso, a proteção ficaria a cargo da versão da libexpat
-    instalada na VM.
+    Segurança: o arquivo vem do candidato. Recusamos todo XML com DTD
+    (<!DOCTYPE> ou <!ENTITY>), em qualquer codificação, que é por onde vêm os
+    ataques de XML ("billion laughs", entidade externa lendo arquivo do
+    servidor). O XML exportado pelo Lattes não tem DTD. Sem isso, a proteção
+    ficaria a cargo da versão da libexpat instalada na VM.
 
     Leitura tolerante, como na skill lattes-xml-extrator: há currículos
     exportados com caractere de controle ou "&" solto que quebram o parser, e
     recusá-los barraria candidatos por defeito do próprio Lattes.
     """
-    if b"<!ENTITY" in conteudo:
+    if b"<!ENTITY" in conteudo or _declara_dtd(conteudo):
         return None
     try:
         return ET.fromstring(conteudo)
@@ -106,6 +134,10 @@ def ler_curriculo_lattes(conteudo: bytes):
     texto = re.sub(r"^<\?xml[^>]*\?>", "", texto.lstrip())
     texto = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", texto)
     texto = re.sub(r"&(?!#?\w+;)", "&amp;", texto)
+    # O XML malformado não chegou a ser conferido pelo expat; depois de tirar
+    # os bytes nulos, um UTF-16 também aparece aqui como texto legível.
+    if "<!DOCTYPE" in texto or "<!ENTITY" in texto:
+        return None
     try:
         return ET.fromstring(texto)
     except ET.ParseError:

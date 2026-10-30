@@ -82,11 +82,9 @@ class Command(BaseCommand):
             .select_related("usuario", "vaga")
             # Empate na pontuação: mais velho(a) primeiro (maior idade, último
             # critério dos Anexos). É só a ordem da lista — o desempate oficial
-            # vem depois da Entrevista, na planilha, e para estudante o CRE
-            # entra antes da idade (Edital 31). O CRE não é guardado pelo
-            # sistema: o desempate do estudante é feito na planilha após a
-            # Entrevista (Edital 31, Anexo I, 9 c). nulls_last: SQLite e Postgres
-            # discordam de onde vai a data em branco.
+            # é feito na planilha após a Entrevista; para estudante o CRE, que o
+            # sistema não guarda, entra antes da idade (Edital 31, Anexo I, 9 c).
+            # nulls_last: SQLite e Postgres discordam de onde vai a data em branco.
             .order_by("-total_validado", F("usuario__data_nascimento").asc(nulls_last=True))
         )
         if options["modalidade"]:
