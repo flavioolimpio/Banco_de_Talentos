@@ -188,7 +188,7 @@ def _exportar_inscricoes_csv(queryset) -> HttpResponse:
     writer = csv.writer(response, delimiter=";")
     writer.writerow([
         "Nome", "CPF", "E-mail", "Vínculo", "Modalidade",
-        "Tipo Servidor", "Status", "Pontuação Total", "Criado em",
+        "Tipo Servidor", "Status", "Pontuação Validada", "Pontuação Declarada (legado)", "Criado em",
     ])
     for ins in queryset.select_related("usuario"):
         u = ins.usuario
@@ -200,6 +200,7 @@ def _exportar_inscricoes_csv(queryset) -> HttpResponse:
             ins.get_modalidade_display(),
             ins.get_tipo_servidor_display() if ins.tipo_servidor else "—",
             ins.get_status_display(),
+            ins.total_validado,
             ins.total,
             ins.criado_em.strftime("%d/%m/%Y %H:%M"),
         ])
@@ -208,11 +209,19 @@ def _exportar_inscricoes_csv(queryset) -> HttpResponse:
 
 @admin.register(Inscricao)
 class InscricaoAdmin(admin.ModelAdmin):
-    list_display = ("usuario", "modalidade", "tipo_servidor", "total", "total_validado", "status", "link_revisar", "atualizado_em")
+    # `total` é a soma declarada do credenciamento antigo; no fluxo por Chamada
+    # é sempre 0 (o candidato não responde o quadro), então a lista mostra só
+    # a pontuação validada. O `total` continua no formulário e no CSV.
+    list_display = ("usuario", "modalidade", "tipo_servidor", "total_validado", "status", "link_revisar", "atualizado_em")
     list_filter = ("modalidade", "tipo_servidor", "status")
     search_fields = ("usuario__cpf", "usuario__nome_completo", "usuario__email")
-    readonly_fields = ("criado_em", "atualizado_em", "enviada_em", "pdf_download_link", "total_validado", "revisado_em", "revisado_por")
-    exclude = ("comprovantes_pdf", "comprovantes_pdf_nome_original", "comprovantes_pdf_tamanho", "comprovantes_pdf_mime")
+    readonly_fields = ("criado_em", "atualizado_em", "enviada_em", "pdf_download_link", "xml_download_link", "total_validado", "revisado_em", "revisado_por")
+    # Os campos de arquivo ficam fora do formulário: o widget padrão mostra o
+    # caminho em /media/, que contém o CPF, e deixaria trocar ou apagar o
+    # arquivo sem validação nem AuditLog. O acesso é pelos links abaixo, que
+    # passam pelas views autenticadas e auditadas.
+    exclude = ("comprovantes_pdf", "comprovantes_pdf_nome_original", "comprovantes_pdf_tamanho", "comprovantes_pdf_mime",
+               "lattes_xml", "lattes_xml_nome_original")
     inlines = [InscricaoItemInline]
     actions = ["aprovar_selecionadas", "reprovar_selecionadas", "marcar_em_analise", "exportar_csv"]
 
@@ -228,6 +237,15 @@ class InscricaoAdmin(admin.ModelAdmin):
             download_url, view_url,
         )
     pdf_download_link.short_description = "Comprovantes"
+
+    def xml_download_link(self, obj):
+        if not obj.lattes_xml:
+            return "—"
+        return format_html(
+            '<a href="{}">&#11015; Baixar XML do Lattes</a>',
+            reverse("download_lattes_xml", args=[obj.pk]),
+        )
+    xml_download_link.short_description = "Currículo Lattes (XML)"
 
     def link_revisar(self, obj):
         if obj.status == StatusInscricao.EM_ANALISE:

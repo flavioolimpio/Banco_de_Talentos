@@ -476,6 +476,19 @@ class RevisaoRhTest(BaseChamada):
         # a revisão grava no campo validado, não na resposta
         self.assertEqual(item_qtd.quantidade, 0)
 
+    def test_admin_nao_expoe_o_caminho_do_xml(self):
+        # O caminho em /media/ contém o CPF; o acesso é pela view auditada.
+        self.assertIn(self.usuario.cpf, self.inscricao.lattes_xml.name)
+        resposta = self.client.get(
+            reverse("admin:inscricoes_inscricao_change", args=[self.inscricao.pk])
+        )
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, "/media/")
+        self.assertNotContains(resposta, self.inscricao.lattes_xml.name)
+        self.assertNotContains(resposta, f"/{self.usuario.cpf}/")
+        self.assertNotContains(resposta, 'name="lattes_xml"')
+        self.assertContains(resposta, reverse("download_lattes_xml", args=[self.inscricao.pk]))
+
     def test_trocar_a_opcao_troca_os_pontos(self):
         item_opc = self.inscricao.itens.get(criterio=self.escolha)
         self._revisar(**{f"validado_opcao_{item_opc.pk}": str(self.mestrado.pk)})
