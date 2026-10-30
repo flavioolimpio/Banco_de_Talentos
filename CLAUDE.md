@@ -61,8 +61,8 @@ pode ser expandido para apoiar etapas de alocação e cadastro no SRInfo.
 ### Reforma de setembro/2026 — NÃO ESTÁ EM PRODUÇÃO
 
 A reunião com a gestão em 18/09/2026 decidiu duas mudanças ligadas, hoje
-implementadas na branch **`feat/home-limpa-e-migrations`** (9 commits, 205
-testes passando, **não mergeada em `main`**):
+implementadas na branch **`feat/home-limpa-e-migrations`** (16 commits, 243
+testes passando, **não mergeada em `main`**; tudo commitado em 30/10/2026):
 
 1. **O cadastro virou só perfil.** A Análise Curricular saiu do credenciamento.
 2. **A inscrição passou a ser por Chamada Interna.** Cada chamada tem as suas
@@ -335,7 +335,7 @@ python manage.py makemigrations --check --dry-run   # não pode sugerir nada
 python manage.py makemigrations
 python manage.py migrate
 
-# Rodar testes  (205 e contando — devem passar TODOS antes de commitar)
+# Rodar testes  (243 e contando — devem passar TODOS antes de commitar)
 python manage.py test
 
 # Verificar segurança antes de deploy
@@ -404,9 +404,13 @@ python manage.py itens_orfaos [--chamada <id>]
 
 1. **Fechar as retificações dos Editais 29, 30 e 31 e levar à PROPPG** — é o que
    destrava tudo (ver o bloqueio em "Estado atual do projeto"). Roteiro em
-   `CHAMADAS_INTERNAS/HANDOFF_retificacao4_2026-10-28.md`, seções 3 e 4. Antes do
-   deploy: commitar o código fora do git (Lattes XML de 23–24/09 e o de 28/10;
-   232 testes OK em 28/10).
+   `CHAMADAS_INTERNAS/HANDOFF_retificacao4_2026-10-28.md`, seções 2.5, 3 e 4. Os
+   três editais limpos estão prontos no OneDrive (30/10). O código está todo
+   commitado na branch (243 testes OK em 30/10); pendentes do revisor:
+   `InscricaoItemInline` ainda deixa digitar `pontuacao_validada` no admin para
+   chamadas não-legado, e os quadros modelo de `quadros.py` seguem acima de 100
+   (patch de redistribuição em `docs/superpowers/plans/2026-10-30-quadros-modelo-100.patch`,
+   não aplicado: decisão de pesos da Coordenação).
 2. **Ensaio da migração com dump real.** `pg_dump -Fc` da VM, restaurar num
    PostgreSQL de rascunho, rodar `migrate`. O SQLite do dev não reproduz o
    comportamento de constraint/NOT NULL do Postgres. Parar em `0013`, conferir
@@ -426,7 +430,7 @@ Pendências menores:
 - **Logo do Criar** — não existe arquivo no repositório. O `<img>` está escrito
   e comentado em `templates/usuarios/home.html`; basta soltar `logo-criar.png`
   em `django_app/static/imagens/` e descomentar.
-- `senha_sudo.txt` continua na raiz, fora do `.gitignore`. Tirar do repositório.
+- `senha_sudo.txt` nunca foi rastreado e agora está no `.gitignore`; apagar do disco quando não for mais preciso.
 
 Handoffs, do mais recente: `CHAMADAS_INTERNAS/HANDOFF_retificacao4_2026-10-28.md`
 (Editais 29, 30 e 31: versões de 28/10, decisões e código sem commit — ler seções 3 e 4 primeiro),
