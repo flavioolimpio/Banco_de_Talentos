@@ -61,7 +61,7 @@ pode ser expandido para apoiar etapas de alocação e cadastro no SRInfo.
 ### Reforma de setembro/2026 — NÃO ESTÁ EM PRODUÇÃO
 
 A reunião com a gestão em 18/09/2026 decidiu duas mudanças ligadas, hoje
-implementadas na branch **`feat/home-limpa-e-migrations`** (9 commits, 195
+implementadas na branch **`feat/home-limpa-e-migrations`** (9 commits, 205
 testes passando, **não mergeada em `main`**):
 
 1. **O cadastro virou só perfil.** A Análise Curricular saiu do credenciamento.
@@ -71,16 +71,20 @@ testes passando, **não mergeada em `main`**):
    inscreve naquela chamada — resolve a reclamação de candidatos convocados
    repetidamente para chamadas em que não tinham interesse.
 
-Base normativa: proposta de **Retificação nº 4/2026** ao Edital PROPPG 29/2026,
-itens 5.1 a 5.16 — ver `CHAMADAS_INTERNAS/Edital29_2026_revisao_Ret4_controle_alteracoes.md`.
+Base normativa: proposta de **Retificação nº 3/2026** ao Edital PROPPG 29/2026 (até 28/10/2026
+chamada de "Ret. 4" — código, handoffs e nomes de arquivo ainda usam esse nome) e
+**Ret. 1/2026** ao Edital 30/2026; os dois valem até 31/12/2026,
+itens 5.1 a 5.16. **A versão de trabalho do Edital fica no OneDrive, não no repositório:**
+`C:\Users\user\OneDrive\Flavio\Aulas\IFG_Valparaiso\EMBRAPII\01_Editais\2026_Banco_de_Especialistas\Edital_29-2026_Servidores\Retificacao_04-2026`
+— **`Edital29_2026_consolidado_Ret4.docx`** (mestre; o `.md`/`.html` de 23/09 têm o mesmo
+texto, conferido em 21/10/2026). Os demais arquivos da pasta são rascunhos superados. Editar só lá.
 
-> 🚧 **Bloqueio para o lançamento, e não é código:** o arquivo do Edital revisado
-> tem **duas seções numeradas 6**. Na antiga, o item **6.12** manda a
-> manifestação de interesse ser feita por formulário institucional em conta
-> @ifg.edu.br — **contradiz o botão de inscrição que foi construído**. Enquanto
-> esse texto não for suprimido pela PROPPG, a inscrição pelo sistema fica sem
-> base normativa. Detalhes em
-> `CHAMADAS_INTERNAS/HANDOFF_chamadas_internas_2026-09-20.md`.
+> 🚧 **Bloqueio para o lançamento, e não é código:** a seção 6 duplicada (item
+> 6.12, formulário em conta @ifg.edu.br) **já foi suprimida no consolidado**, mas
+> o texto **ainda não foi aprovado pela PROPPG**. Em 28/10/2026 ficaram prontas as
+> versões limpas do 29 (Ret. 3/2026, `..._v05_limpo.docx`) e do 30 (Ret. 1/2026,
+> `..._v03_limpo.docx`), e a proposta com marcas do 31 (Ret. 1/2026), que aguarda
+> revisão do Prof. Flávio. Detalhes em `CHAMADAS_INTERNAS/HANDOFF_retificacao4_2026-10-28.md`.
 
 ### Acesso à VM / deploy
 
@@ -154,7 +158,6 @@ Arquivos em `static/js/`:
 
 | Arquivo | Para quê |
 |---|---|
-| `chamada_form.js` | total ao vivo no formulário da chamada |
 | `revisao.js` | total ao vivo na revisão do RH |
 | `uf_cidade.js` | troca a lista de cidades ao mudar o estado |
 | `mascaras.js` | máscara de telefone |
@@ -332,7 +335,7 @@ python manage.py makemigrations --check --dry-run   # não pode sugerir nada
 python manage.py makemigrations
 python manage.py migrate
 
-# Rodar testes  (195 e contando — devem passar TODOS antes de commitar)
+# Rodar testes  (205 e contando — devem passar TODOS antes de commitar)
 python manage.py test
 
 # Verificar segurança antes de deploy
@@ -399,8 +402,11 @@ python manage.py itens_orfaos [--chamada <id>]
 
 **Colocar a reforma de setembro em produção.** Na ordem:
 
-1. **Levar a seção 6 do Edital 29 à PROPPG** — é o que destrava tudo
-   (ver o bloqueio em "Estado atual do projeto").
+1. **Fechar as retificações dos Editais 29, 30 e 31 e levar à PROPPG** — é o que
+   destrava tudo (ver o bloqueio em "Estado atual do projeto"). Roteiro em
+   `CHAMADAS_INTERNAS/HANDOFF_retificacao4_2026-10-28.md`, seções 3 e 4. Antes do
+   deploy: commitar o código fora do git (Lattes XML de 23–24/09 e o de 28/10;
+   232 testes OK em 28/10).
 2. **Ensaio da migração com dump real.** `pg_dump -Fc` da VM, restaurar num
    PostgreSQL de rascunho, rodar `migrate`. O SQLite do dev não reproduz o
    comportamento de constraint/NOT NULL do Postgres. Parar em `0013`, conferir
@@ -410,17 +416,22 @@ python manage.py itens_orfaos [--chamada <id>]
    **Parar o serviço não é preciosismo:** entre a `0012` e a `0014` não existe
    índice de unicidade por usuário. As três rodam no mesmo `migrate`.
 4. **Avisar a gestão** de que o banner "Complete seu perfil" vai reaparecer para
-   100% dos cadastrados — `perfil_completo` passou a exigir área CNPq, maior
-   titulação e a ciência de comunicações, que ninguém tem ainda.
+   100% dos cadastrados e que, **sem cadastro completo, a inscrição em Chamada
+   fica bloqueada** (item 5.3). `perfil_completo` exige os campos do item 4.2
+   conforme o vínculo (`CAMPOS_CADASTRO` em `apps/usuarios/models.py`) e as
+   declarações, que ninguém tem ainda.
 
 Pendências menores:
 
-- **Logo do CRIAR** — não existe arquivo no repositório. O `<img>` está escrito
+- **Logo do Criar** — não existe arquivo no repositório. O `<img>` está escrito
   e comentado em `templates/usuarios/home.html`; basta soltar `logo-criar.png`
   em `django_app/static/imagens/` e descomentar.
 - `senha_sudo.txt` continua na raiz, fora do `.gitignore`. Tirar do repositório.
 
-Handoff completo: `CHAMADAS_INTERNAS/HANDOFF_chamadas_internas_2026-09-20.md`.
+Handoffs, do mais recente: `CHAMADAS_INTERNAS/HANDOFF_retificacao4_2026-10-28.md`
+(Editais 29, 30 e 31: versões de 28/10, decisões e código sem commit — ler seções 3 e 4 primeiro),
+`HANDOFF_retificacao4_2026-10-26.md` (revisão e cópia com propostas), `HANDOFF_retificacao4_2026-10-21.md`, `HANDOFF_lattes_xml_edital_2026-09-24.md` (código não commitado) e
+`HANDOFF_chamadas_internas_2026-09-20.md` (reforma e roteiro de deploy).
 Plano que originou a reforma:
 `~/.claude/plans/ontem-tive-uma-reuni-o-partitioned-lightning.md`.
 

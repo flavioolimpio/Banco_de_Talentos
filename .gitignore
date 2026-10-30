@@ -50,3 +50,9 @@ staticfiles/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Credenciais locais - NUNCA COMMITAR
+senha_sudo.txt
+.env
+*.pem
+*.key
