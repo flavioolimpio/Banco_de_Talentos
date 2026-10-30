@@ -1,8 +1,8 @@
 # apps/inscricoes/views_chamadas.py
 # Banco de Talentos — Polo de Inovação IFG
 #
-# Fluxo de inscrição por Chamada Interna (Edital 29/2026, itens 5.1 a 5.16 na
-# redação da proposta de Retificação nº 4/2026).
+# Fluxo de inscrição por Chamada Interna (Seção 5: itens 5.1 a 5.13 nos
+# Editais 29 e 30; 5.1 a 5.14 no 31).
 #
 # Diferença para o fluxo antigo (views.py), que virou histórico:
 #   - o quadro de critérios é o DA CHAMADA, montado pela Coordenação do

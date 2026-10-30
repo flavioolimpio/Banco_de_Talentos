@@ -35,7 +35,7 @@ class VagaInline(admin.TabularInline):
 
 
 class QuadroCriteriosFormSet(BaseInlineFormSet):
-    """Recusa o quadro que soma mais de 100 pontos (Anexo I, item 7.1)."""
+    """Recusa o quadro que soma mais de 100 pontos, conforme o Anexo I (Edital 29: 7.1; 30: 6.1; 31: 8.1)."""
 
     def clean(self):
         super().clean()
@@ -84,7 +84,7 @@ class CriterioEditalInline(admin.TabularInline):
     precisar de deploy (item 5.1, VI do Edital). Para critérios de escolha
     (titulação, por exemplo), cadastre as opções em "Opções do critério"
     depois de salvar a linha. A soma das pontuações máximas de cada quadro
-    não passa de 100 (Anexo I, item 7.1).
+    não passa de 100, conforme o Anexo I (Edital 29: 7.1; 30: 6.1; 31: 8.1).
     """
 
     model = CriterioEdital

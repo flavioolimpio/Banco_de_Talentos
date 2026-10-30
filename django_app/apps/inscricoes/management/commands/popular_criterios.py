@@ -115,7 +115,7 @@ class Command(BaseCommand):
                 "(quantidade ou escolha única), os pontos por unidade e o que é\n"
                 "contado. Enquanto isso não for feito, os critérios de quantidade\n"
                 "valem 0 ponto para o candidato. Cada quadro soma no máximo 100\n"
-                "pontos (Anexo I, item 7.1): o admin não salva a chamada acima disso."
+                "pontos — Anexo I (Edital 29: 7.1; 30: 6.1; 31: 8.1). O admin não salva a chamada acima disso."
             ))
 
     def _listar_chamadas(self):

@@ -140,7 +140,8 @@ def inscricao_view(request):
     """Rota antiga de inscrição — aposentada pela Retificação 4.
 
     A Análise Curricular deixou de existir no credenciamento e passou a
-    acontecer dentro de cada Chamada Interna (itens 5.1 a 5.16). Quem chegar
+    acontecer dentro de cada Chamada Interna (Seção 5: itens 5.1 a 5.13 nos
+    Editais 29 e 30; 5.1 a 5.14 no 31). Quem chegar
     aqui por link salvo ou favorito é levado à lista de chamadas.
 
     O fluxo antigo não foi reescrito: as inscrições já enviadas continuam

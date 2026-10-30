@@ -196,10 +196,10 @@ class Vaga(models.Model):
         return f"{self.codigo} — {self.funcao}"
 
 
-# Anexo I, item 7.1 (decisão de 28/10/2026): o quadro de cada Chamada soma no
-# máximo 100 pontos, então a Análise Curricular já sai na escala de 0 a 100,
-# sem conversão. Vale por modalidade/tipo de servidor, que é o quadro que o
-# candidato responde. Chamadas de legado ficam de fora.
+# Anexo I (Edital 29: 7.1; 30: 6.1; 31: 8.1), decisão de 28/10/2026: o quadro
+# de cada Chamada soma no máximo 100 pontos, então a Análise Curricular já sai
+# na escala de 0 a 100, sem conversão. Vale por modalidade/tipo de servidor,
+# que é o quadro que o candidato responde. Chamadas de legado ficam de fora.
 PONTUACAO_MAXIMA_QUADRO = Decimal("100")
 
 
@@ -220,7 +220,7 @@ def erros_do_quadro(linhas) -> list[str]:
                 rotulo += f" ({TipoServidor(tipo_servidor).label})"
             erros.append(
                 f"O quadro de {rotulo} soma {total:g} pontos; o máximo é "
-                f"{PONTUACAO_MAXIMA_QUADRO:g} (Anexo I, item 7.1). Reduza a pontuação máxima dos critérios."
+                f"{PONTUACAO_MAXIMA_QUADRO:g} (Anexo I do Edital). Reduza a pontuação máxima dos critérios."
             )
     return erros
 
