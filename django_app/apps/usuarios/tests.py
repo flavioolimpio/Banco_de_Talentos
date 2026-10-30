@@ -1,8 +1,47 @@
+from datetime import date
+
 from django.test import TestCase
 from django.urls import reverse
 
-from apps.usuarios.models import Usuario, Vinculo
+from apps.usuarios.models import (
+    DECLARACOES_CADASTRO,
+    CategoriaPretendida,
+    MaiorTitulacao,
+    Usuario,
+    Vinculo,
+)
 from apps.usuarios.validators import validar_cpf
+
+RESUMO_VALIDO = " ".join(["palavra"] * 60)
+
+_VALORES_CADASTRO = {
+    "data_nascimento": date(1980, 5, 17),
+    "telefone": "(62) 99999-9999",
+    "uf": "GO",
+    "cidade": "Anápolis",
+    "categoria_pretendida": CategoriaPretendida.PESQUISADOR,
+    "servidor_ativo": True,
+    "maior_titulacao": MaiorTitulacao.DOUTORADO,
+    "instituicao": "IFG — Câmpus Anápolis",
+    "area_atuacao": "Química",
+    "resumo": RESUMO_VALIDO,
+    "lattes": "http://lattes.cnpq.br/1234567890123456",
+}
+
+
+def preencher_campos_cadastro(usuario, exceto=()):
+    """Preenche os campos que o vínculo exige (sem as declarações e sem salvar)."""
+    for campo in usuario.campos_cadastro_exigidos():
+        if campo not in exceto:
+            setattr(usuario, campo, _VALORES_CADASTRO[campo])
+
+
+def completar_cadastro(usuario):
+    """Cadastro completo (item 4.4.2): campos do vínculo + declarações, salvo."""
+    preencher_campos_cadastro(usuario)
+    for campo in DECLARACOES_CADASTRO:
+        usuario.confirmar_declaracao(campo)
+    usuario.save()
 
 
 class CpfValidatorTests(TestCase):
@@ -356,10 +395,7 @@ class PerfilProfissionalModelTest(TestCase):
         )
 
     def _preencher_campos_base(self, usuario):
-        usuario.categoria_pretendida = CategoriaPretendida.PESQUISADOR
-        usuario.maior_titulacao = MaiorTitulacao.DOUTORADO
-        usuario.cnpq_area = "3.04"
-        usuario.disponibilidade_semanal = 20
+        preencher_campos_cadastro(usuario, exceto={"servidor_ativo"})
 
     def _confirmar_todas_declaracoes(self, usuario):
         usuario.confirmar_declaracao("ciencia_credenciamento")
@@ -376,13 +412,18 @@ class PerfilProfissionalModelTest(TestCase):
         self._confirmar_todas_declaracoes(self.externo)
         self.assertTrue(self.externo.perfil_completo)
 
-    def test_servidor_ativo_exige_declaracao_de_nao_afastamento(self):
+    def test_servidor_ativo_nao_precisa_mais_declarar_afastamento(self):
+        # A caixa "não afastado(a)/licenciado(a)" saiu do cadastro em
+        # 23/09/2026: o requisito do item 4.1.1 é verificado em bases internas.
         self._preencher_campos_base(self.servidor)
         self._confirmar_todas_declaracoes(self.servidor)
         self.servidor.servidor_ativo = True
-        self.assertFalse(self.servidor.perfil_completo)
-        self.servidor.nao_afastado_licenciado = True
         self.assertTrue(self.servidor.perfil_completo)
+
+    def test_servidor_precisa_informar_se_esta_ativo(self):
+        self._preencher_campos_base(self.servidor)
+        self._confirmar_todas_declaracoes(self.servidor)
+        self.assertFalse(self.servidor.perfil_completo)
 
     def test_servidor_inativo_nao_precisa_declarar_afastamento(self):
         self._preencher_campos_base(self.servidor)
@@ -404,75 +445,20 @@ class PerfilProfissionalModelTest(TestCase):
         self.assertEqual(self.externo.declaracao_veracidade_em, primeira_data)
 
 
-class MeuCadastroFormPerfilTest(TestCase):
-    def setUp(self):
-        self.servidor_ativo = Usuario.objects.create_user(
-            cpf="11144477735",
-            email="formservativo@test.com",
-            nome_completo="Servidor Ativo",
-            vinculo=Vinculo.SERVIDOR,
-            password="senha123",
-        )
-        self.externo = Usuario.objects.create_user(
-            cpf="52998224725",
-            email="formexterno@test.com",
-            nome_completo="Externo Form",
-            vinculo=Vinculo.COLABORADOR_EXTERNO,
-            password="senha123",
-        )
+class CamposRetiradosDoCadastroTest(TestCase):
+    """Campos que saíram do formulário em 23/09/2026. As colunas continuam no
+    banco — tirar do form não apaga dado."""
 
-    def test_form_aceita_disponibilidade_dentro_da_faixa_servidor_ativo(self):
+    def test_form_nao_tem_mais_os_campos(self):
         from apps.usuarios.forms import MeuCadastroForm
-        form = MeuCadastroForm(
-            {"nome_completo": "X", "email": self.servidor_ativo.email, "servidor_ativo": "true", "disponibilidade_semanal": "20"},
-            instance=self.servidor_ativo,
-        )
-        self.assertTrue(form.is_valid(), form.errors)
+        form = MeuCadastroForm()
+        for campo in ("cnpq_area", "disponibilidade_semanal", "nao_afastado_licenciado"):
+            self.assertNotIn(campo, form.fields)
 
-    def test_form_rejeita_disponibilidade_acima_da_faixa_servidor_ativo(self):
+    def test_rotulo_do_curso(self):
         from apps.usuarios.forms import MeuCadastroForm
-        form = MeuCadastroForm(
-            {"nome_completo": "X", "email": self.servidor_ativo.email, "servidor_ativo": "true", "disponibilidade_semanal": "30"},
-            instance=self.servidor_ativo,
-        )
-        self.assertFalse(form.is_valid())
-        self.assertIn("disponibilidade_semanal", form.errors)
-
-    def test_form_aceita_disponibilidade_ate_40h_para_colaborador_externo(self):
-        from apps.usuarios.forms import MeuCadastroForm
-        form = MeuCadastroForm(
-            {"nome_completo": "X", "email": self.externo.email, "disponibilidade_semanal": "40"},
-            instance=self.externo,
-        )
-        self.assertTrue(form.is_valid(), form.errors)
-
-    def test_form_rejeita_disponibilidade_abaixo_de_5h(self):
-        from apps.usuarios.forms import MeuCadastroForm
-        form = MeuCadastroForm(
-            {"nome_completo": "X", "email": self.externo.email, "disponibilidade_semanal": "3"},
-            instance=self.externo,
-        )
-        self.assertFalse(form.is_valid())
-
-    def test_form_aceita_nao_afastado_licenciado_como_verdadeiro(self):
-        """Testa que checkbox 'nao_afastado_licenciado' com valor "on" é convertido para True."""
-        from apps.usuarios.forms import MeuCadastroForm
-        form = MeuCadastroForm(
-            {"nome_completo": "X", "email": self.servidor_ativo.email, "nao_afastado_licenciado": "on"},
-            instance=self.servidor_ativo,
-        )
-        self.assertTrue(form.is_valid(), form.errors)
-        self.assertTrue(form.cleaned_data["nao_afastado_licenciado"])
-
-    def test_form_nao_afastado_licenciado_opcional_para_servidor_inativo(self):
-        """Campo 'nao_afastado_licenciado' é opcional e valida sem ser preenchido."""
-        from apps.usuarios.forms import MeuCadastroForm
-        form = MeuCadastroForm(
-            {"nome_completo": "X", "email": self.servidor_ativo.email, "servidor_ativo": ""},
-            instance=self.servidor_ativo,
-        )
-        self.assertTrue(form.is_valid(), form.errors)
-        self.assertFalse(form.cleaned_data["nao_afastado_licenciado"])
+        form = MeuCadastroForm()
+        self.assertEqual(form.fields["area_atuacao"].label, "Curso e área de concentração")
 
 
 class MeuCadastroPerfilViewTest(TestCase):
@@ -521,7 +507,39 @@ class MeuCadastroPerfilViewTest(TestCase):
         self.assertNotContains(perfil, "name=\"maior_titulacao\"")
         formacao = self.client.get(reverse("meu_cadastro") + "?aba=formacao")
         self.assertContains(formacao, "name=\"maior_titulacao\"")
-        self.assertContains(formacao, "name=\"cnpq_area\"")
+        self.assertNotContains(formacao, "name=\"cnpq_area\"")
+
+    def test_aba_perfil_se_chama_declaracoes_e_nao_tem_disponibilidade(self):
+        self.client.force_login(self.servidor)
+        resposta = self.client.get(reverse("meu_cadastro") + "?aba=perfil")
+        self.assertContains(resposta, "Declara&ccedil;&otilde;es")
+        self.assertNotContains(resposta, "Perfil Profissional")
+        self.assertNotContains(resposta, "name=\"disponibilidade_semanal\"")
+        self.assertNotContains(resposta, "afastado")
+
+    def test_post_formacao_sem_email_salva(self):
+        # Regressão: o POST da aba Formação não traz o e-mail (ele está na aba
+        # Dados). Com o e-mail obrigatório no form inteiro, a aba era recusada
+        # sem mostrar erro nenhum e nada era gravado.
+        self.client.force_login(self.externo)
+        resposta = self.client.post(
+            reverse("meu_cadastro") + "?aba=formacao",
+            {"area_atuacao": "Química — Química Computacional"},
+        )
+        self.assertEqual(resposta.status_code, 302)
+        self.externo.refresh_from_db()
+        self.assertEqual(self.externo.area_atuacao, "Química — Química Computacional")
+        self.assertEqual(self.externo.email, "viewexterno@test.com")
+
+    def test_post_declaracoes_sem_email_salva(self):
+        self.client.force_login(self.externo)
+        resposta = self.client.post(
+            reverse("meu_cadastro") + "?aba=perfil",
+            {"declaracao_veracidade": "on"},
+        )
+        self.assertEqual(resposta.status_code, 302)
+        self.externo.refresh_from_db()
+        self.assertTrue(self.externo.declaracao_veracidade)
 
     def test_post_perfil_grava_declaracao_com_timestamp(self):
         self.client.force_login(self.externo)
@@ -556,42 +574,6 @@ class MeuCadastroPerfilViewTest(TestCase):
         self.externo.refresh_from_db()
         self.assertIsNone(self.externo.servidor_ativo)
 
-    def test_servidor_ativo_sem_declaracao_afastamento_mantem_perfil_incompleto(self):
-        """POST via view com servidor_ativo=true mas sem confirmar nao_afastado_licenciado: perfil continua incompleto."""
-        self.servidor.area_atuacao = "Engenharia"
-        self.servidor.save(update_fields=["area_atuacao"])
-        self.client.force_login(self.servidor)
-        self.client.post(
-            reverse("meu_cadastro") + "?aba=perfil",
-            {
-                "nome_completo": "X",
-                "categoria_pretendida": "pesquisador",
-                "disponibilidade_semanal": "20",
-                "servidor_ativo": "true",
-                "ciencia_credenciamento": "on",
-                "declaracao_veracidade": "on",
-                "consentimento_verificacao_bases": "on",
-            },
-        )
-        self.servidor.refresh_from_db()
-        self.assertFalse(self.servidor.perfil_completo)
-
-    def test_servidor_ativo_mantem_teto_de_20h_via_view(self):
-        """Servidor com servidor_ativo=true postando 40h pela view continua rejeitado (teto de 20h)."""
-        self.client.force_login(self.servidor)
-        response = self.client.post(
-            reverse("meu_cadastro") + "?aba=perfil",
-            {
-                "nome_completo": "X",
-                "servidor_ativo": "true",
-                "disponibilidade_semanal": "40",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertFormError(response.context["form"], "disponibilidade_semanal", "Disponibilidade deve estar entre 5 e 20 horas semanais.")
-        self.servidor.refresh_from_db()
-        self.assertIsNone(self.servidor.disponibilidade_semanal)
-
 
 class HomeBannerPerfilTest(TestCase):
     def setUp(self):
@@ -609,15 +591,7 @@ class HomeBannerPerfilTest(TestCase):
         self.assertContains(response, "Complete seu perfil")
 
     def test_banner_some_quando_perfil_completo(self):
-        self.usuario.categoria_pretendida = CategoriaPretendida.PESQUISADOR
-        self.usuario.maior_titulacao = MaiorTitulacao.DOUTORADO
-        self.usuario.cnpq_area = "3.04"
-        self.usuario.disponibilidade_semanal = 20
-        self.usuario.confirmar_declaracao("ciencia_credenciamento")
-        self.usuario.confirmar_declaracao("ciencia_comunicacoes")
-        self.usuario.confirmar_declaracao("declaracao_veracidade")
-        self.usuario.confirmar_declaracao("consentimento_verificacao_bases")
-        self.usuario.save()
+        completar_cadastro(self.usuario)
         response = self.client.get(reverse("home"))
         self.assertNotContains(response, "Complete seu perfil")
 
@@ -673,12 +647,7 @@ class CienciaComunicacoesTest(TestCase):
         self.assertContains(resposta, "receberei")
 
     def test_entra_no_perfil_completo(self):
-        from apps.usuarios.models import CategoriaPretendida, MaiorTitulacao
-
-        self.usuario.categoria_pretendida = CategoriaPretendida.PESQUISADOR
-        self.usuario.maior_titulacao = MaiorTitulacao.DOUTORADO
-        self.usuario.cnpq_area = "3.04"
-        self.usuario.disponibilidade_semanal = 20
+        preencher_campos_cadastro(self.usuario)
         for campo in ("ciencia_credenciamento", "declaracao_veracidade",
                       "consentimento_verificacao_bases"):
             self.usuario.confirmar_declaracao(campo)
@@ -778,3 +747,130 @@ class EstadoCidadeTest(TestCase):
         self.assertEqual(municipios_de(""), [])
         self.assertEqual(municipios_de("XX"), [])
         self.assertIn("Itumbiara", municipios_de("go"))  # aceita minúscula
+
+
+class CadastroCompletoPorVinculoTest(TestCase):
+    """Item 4.4.2: cadastro completo = campos do item 4.2 + declarações.
+
+    Cada vínculo tem o seu Edital (29 servidores, 30 externos, 31 estudantes).
+    O estudante não tem categoria nem titulação; informa instituição e curso.
+    """
+
+    def _usuario(self, vinculo, cpf):
+        return Usuario.objects.create_user(
+            cpf=cpf,
+            email=f"{vinculo}@test.com",
+            nome_completo="Pessoa Teste",
+            vinculo=vinculo,
+            password="senha123",
+        )
+
+    def setUp(self):
+        self.servidor = self._usuario(Vinculo.SERVIDOR, "11144477735")
+        self.externo = self._usuario(Vinculo.COLABORADOR_EXTERNO, "52998224725")
+        self.estudante = self._usuario(Vinculo.ESTUDANTE, "39053344705")
+
+    def test_todos_completos_com_o_helper(self):
+        for usuario in (self.servidor, self.externo, self.estudante):
+            completar_cadastro(usuario)
+            self.assertTrue(usuario.perfil_completo, usuario.vinculo)
+
+    def test_cada_campo_do_4_2_e_exigido_do_servidor(self):
+        for campo in ("telefone", "uf", "cidade", "area_atuacao", "resumo", "lattes"):
+            completar_cadastro(self.servidor)
+            setattr(self.servidor, campo, "")
+            self.assertFalse(self.servidor.perfil_completo, campo)
+
+    def test_estudante_nao_tem_categoria_nem_titulacao(self):
+        completar_cadastro(self.estudante)
+        self.assertEqual(self.estudante.categoria_pretendida, "")
+        self.assertEqual(self.estudante.maior_titulacao, "")
+        self.assertTrue(self.estudante.perfil_completo)
+
+    def test_estudante_precisa_da_instituicao(self):
+        completar_cadastro(self.estudante)
+        self.estudante.instituicao = ""
+        self.assertEqual(self.estudante.pendencias_cadastro(), ["instituição de ensino"])
+
+    def test_resumo_e_opcional_para_estudante(self):
+        completar_cadastro(self.estudante)
+        self.estudante.resumo = ""
+        self.assertTrue(self.estudante.perfil_completo)
+
+    def test_externo_nao_informa_situacao_funcional(self):
+        completar_cadastro(self.externo)
+        self.assertIsNone(self.externo.servidor_ativo)
+        self.assertTrue(self.externo.perfil_completo)
+
+    def test_resumo_antigo_fora_do_tamanho_e_pendencia(self):
+        completar_cadastro(self.externo)
+        self.externo.resumo = "Resumo curto do cadastro antigo."
+        self.assertEqual(
+            self.externo.pendencias_cadastro(),
+            ["resumo da atuação profissional (50 a 200 palavras)"],
+        )
+
+    def test_banner_lista_o_que_falta(self):
+        completar_cadastro(self.externo)
+        self.externo.telefone = ""
+        self.externo.save()
+        self.client.force_login(self.externo)
+        resposta = self.client.get(reverse("home"))
+        self.assertContains(resposta, "Falta: telefone.")
+
+    def test_formulario_do_estudante(self):
+        self.client.force_login(self.estudante)
+        dados = self.client.get(reverse("meu_cadastro") + "?aba=dados")
+        self.assertNotContains(dados, 'name="categoria_pretendida"')
+        formacao = self.client.get(reverse("meu_cadastro") + "?aba=formacao")
+        self.assertContains(formacao, 'name="instituicao"')
+        self.assertContains(formacao, "Curso em andamento")
+        self.assertNotContains(formacao, 'name="maior_titulacao"')
+
+    def test_formulario_do_servidor_nao_pede_instituicao(self):
+        self.client.force_login(self.servidor)
+        formacao = self.client.get(reverse("meu_cadastro") + "?aba=formacao")
+        self.assertNotContains(formacao, 'name="instituicao"')
+        self.assertContains(formacao, 'name="maior_titulacao"')
+        self.assertContains(self.client.get(reverse("meu_cadastro")), 'name="servidor_ativo"')
+
+class DataNascimentoTest(TestCase):
+    """Data de nascimento: último critério de desempate (maior idade)."""
+
+    def setUp(self):
+        self.usuario = Usuario.objects.create_user(
+            cpf="11144477735",
+            email="nascimento@test.com",
+            nome_completo="Nascimento Teste",
+            vinculo=Vinculo.ESTUDANTE,
+            password="senha123",
+        )
+        self.client.force_login(self.usuario)
+
+    def _post_dados(self, data):
+        return self.client.post(reverse("meu_cadastro") + "?aba=dados", {
+            "nome_completo": "Nascimento Teste",
+            "email": self.usuario.email,
+            "data_nascimento": data,
+        })
+
+    def test_exigida_no_cadastro_completo(self):
+        completar_cadastro(self.usuario)
+        self.usuario.data_nascimento = None
+        self.assertEqual(self.usuario.pendencias_cadastro(), ["data de nascimento"])
+
+    def test_aparece_na_aba_dados_com_calendario(self):
+        resposta = self.client.get(reverse("meu_cadastro") + "?aba=dados")
+        self.assertContains(resposta, 'type="date"')
+
+    def test_grava_data_valida(self):
+        self._post_dados("2008-03-09")
+        self.usuario.refresh_from_db()
+        self.assertEqual(self.usuario.data_nascimento, date(2008, 3, 9))
+
+    def test_recusa_data_implausivel(self):
+        for data in ("2062-01-01", "1900-01-01"):
+            resposta = self._post_dados(data)
+            self.assertContains(resposta, "Confira a data de nascimento.")
+        self.usuario.refresh_from_db()
+        self.assertIsNone(self.usuario.data_nascimento)

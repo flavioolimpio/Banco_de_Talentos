@@ -94,9 +94,9 @@
 {% if not request.user.perfil_completo %}
 <div style="margin:20px 32px 0;padding:14px 18px;background:#fff8e1;border:1px solid #f0d97a;border-radius:8px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
     <span style="font-size:14px;color:#7a5a00">
-        <strong>Complete seu perfil</strong> — faltam informações no seu cadastro (categoria pretendida, maior titulação, área do conhecimento, disponibilidade e declarações).
+        <strong>Complete seu perfil</strong> — sem o cadastro completo não é possível se inscrever nas Chamadas Internas. Falta: {{ request.user.pendencias_cadastro|join:", " }}.
     </span>
-    <a href="{% url 'meu_cadastro' %}?aba=perfil" class="home-cta" style="white-space:nowrap">Completar agora</a>
+    <a href="{% url 'meu_cadastro' %}" class="home-cta" style="white-space:nowrap">Completar agora</a>
 </div>
 {% endif %}
 

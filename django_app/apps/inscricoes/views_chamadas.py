@@ -123,6 +123,17 @@ def inscricao_chamada(request, pk):
     if not chamada.aberta:
         return render(request, "inscricoes/chamada_fora_do_prazo.html", {"chamada": chamada})
 
+    # Item 5.3 do Edital: só se inscreve quem está credenciado, isto é, com o
+    # cadastro completo (item 4.4.2). Vale para o rascunho também — e para o
+    # POST, pelo mesmo motivo do prazo acima.
+    pendencias = usuario.pendencias_cadastro()
+    if pendencias:
+        return render(
+            request,
+            "inscricoes/chamada_cadastro_incompleto.html",
+            {"chamada": chamada, "pendencias": pendencias},
+        )
+
     if request.method == "GET":
         form = InscricaoChamadaForm(
             chamada=chamada,
@@ -214,8 +225,6 @@ def _render_formulario(request, chamada, form, inscricao):
             "chamada": chamada,
             "form": form,
             "inscricao": inscricao,
-            "lattes_ausente": not request.user.lattes,
-            "perfil_incompleto": not request.user.perfil_completo,
         },
     )
 

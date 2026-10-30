@@ -3,8 +3,9 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.forms import PasswordResetForm, SetPasswordForm
 from django.core.exceptions import ValidationError
 from django.templatetags.static import static
+from django.utils import timezone
 
-from apps.usuarios.models import Usuario, Vinculo
+from apps.usuarios.models import Usuario, Vinculo, resumo_tem_tamanho_valido
 from apps.usuarios.municipios import UF_CHOICES, municipios_de
 from apps.usuarios.validators import somente_digitos, validar_cpf
 
@@ -124,12 +125,6 @@ class ServidorAtivoSelect(forms.NullBooleanSelect):
 
 
 class MeuCadastroForm(forms.ModelForm):
-    nao_afastado_licenciado = forms.BooleanField(
-        required=False,
-        label="não afastado(a)/licenciado(a)",
-        widget=forms.CheckboxInput(attrs={"style": "margin-top:3px;flex-shrink:0;width:16px;height:16px"}),
-    )
-
     # Estado e cidade são selects encadeados. O estado tem lista fixa; a cidade
     # é preenchida em __init__ com os municípios do estado escolhido, para o
     # formulário funcionar mesmo sem JavaScript. Com JS (uf_cidade.js), a lista
@@ -149,15 +144,17 @@ class MeuCadastroForm(forms.ModelForm):
         model = Usuario
         # Campos do cadastro enxuto, conforme os blocos A–G de
         # docs/Estrutura_Perfil_Cadastro_Banco_Especialistas.md. Vários campos
-        # que existiam aqui (data de nascimento, gênero, instituição, LinkedIn,
-        # nível de formação em texto livre) saíram do formulário — mas as
-        # COLUNAS continuam no banco. Tirar do form não apaga dado.
+        # que existiam aqui (gênero, LinkedIn, nível de formação em texto
+        # livre) saíram do formulário — mas as COLUNAS continuam no banco.
+        # Tirar do form não apaga dado. O mesmo vale para cnpq_area,
+        # disponibilidade_semanal e nao_afastado_licenciado, que saíram em
+        # 23/09/2026. Instituição (só estudante) e data de nascimento (desempate
+        # por idade) voltaram em 28/10/2026.
         fields = [
-            "nome_completo", "email", "telefone",
+            "nome_completo", "data_nascimento", "email", "telefone",
             "uf", "cidade",
             "categoria_pretendida", "servidor_ativo",
-            "maior_titulacao", "area_atuacao", "cnpq_area", "resumo", "lattes",
-            "disponibilidade_semanal", "nao_afastado_licenciado",
+            "maior_titulacao", "instituicao", "area_atuacao", "resumo", "lattes",
         ]
         widgets = {
             # `placeholder` é o texto cinza-claro que aparece dentro do campo
@@ -174,14 +171,18 @@ class MeuCadastroForm(forms.ModelForm):
             "nome_completo": forms.TextInput(attrs={
                 "placeholder": "Como consta no seu documento de identificação",
             }),
+            # type="date" usa o calendário do próprio navegador. O format ISO
+            # é obrigatório: é o único que o <input type="date"> entende para
+            # mostrar a data já gravada.
+            "data_nascimento": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "instituicao": forms.TextInput(attrs={
+                "placeholder": "Ex.: IFG — Câmpus Anápolis",
+            }),
             "area_atuacao": forms.TextInput(attrs={
                 "placeholder": "Ex.: Engenharia Elétrica — Sistemas de Potência",
             }),
             "lattes": forms.URLInput(attrs={
                 "placeholder": "http://lattes.cnpq.br/0000000000000000",
-            }),
-            "disponibilidade_semanal": forms.NumberInput(attrs={
-                "placeholder": "Ex.: 20",
             }),
             "resumo": forms.Textarea(attrs={
                 "rows": 6,
@@ -196,26 +197,41 @@ class MeuCadastroForm(forms.ModelForm):
             "uf": "Estado (UF)",
             "email": "E-mail",
             "maior_titulacao": "Maior titulação concluída",
-            "area_atuacao": "Curso e área de formação",
-            "cnpq_area": "Área do conhecimento (Tabela CNPq)",
+            "instituicao": "Instituição de ensino",
+            "area_atuacao": "Curso e área de concentração",
             "resumo": "Resumo da atuação profissional",
         }
         help_texts = {
             "email": "Usado para a divulgação de vagas e para recuperar a senha.",
             "lattes": "Currículo atualizado nos últimos 6 meses.",
+            "data_nascimento": "Usada no desempate por maior idade.",
             "resumo": "Entre 50 e 200 palavras.",
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, campos=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # Só os campos da aba aberta. Sem isso o e-mail, obrigatório e presente
+        # apenas na aba Dados, faltava no POST das outras abas: o formulário era
+        # recusado e o erro não aparecia, porque o campo não estava na tela.
+        if campos is not None:
+            for nome in list(self.fields):
+                if nome not in campos:
+                    del self.fields[nome]
         for field in self.fields.values():
             field.required = False
         # ATENÇÃO: esta linha vem DEPOIS do laço acima de propósito. Sem ela o
         # e-mail ficaria opcional e salvar a aba com o campo vazio gravaria
         # email="" — o segundo usuário a fazer isso bateria no unique=True
         # (erro 500) e o primeiro perderia a recuperação de senha.
-        self.fields["email"].required = True
-        self._preparar_cidades()
+        if "email" in self.fields:
+            self.fields["email"].required = True
+        if "cidade" in self.fields:
+            self._preparar_cidades()
+        # Para o estudante, "curso" é o que ele cursa agora (Edital 31), não a
+        # formação concluída de servidores e externos.
+        if getattr(self.instance, "vinculo", "") == Vinculo.ESTUDANTE and "area_atuacao" in self.fields:
+            self.fields["area_atuacao"].label = "Curso em andamento"
+            self.fields["area_atuacao"].widget.attrs["placeholder"] = "Ex.: Bacharelado em Engenharia Civil"
 
     def _preparar_cidades(self):
         """Preenche as opções de cidade com os municípios do estado atual.
@@ -256,25 +272,24 @@ class MeuCadastroForm(forms.ModelForm):
             raise ValidationError("Já existe um cadastro com este e-mail.")
         return email
 
+    def clean_data_nascimento(self):
+        # Pega erro de digitação (2062 no lugar de 1962). O piso de 14 anos
+        # cobre o estudante de curso técnico integrado ao ensino médio.
+        data = self.cleaned_data.get("data_nascimento")
+        if data:
+            hoje = timezone.localdate()
+            idade = hoje.year - data.year - ((hoje.month, hoje.day) < (data.month, data.day))
+            if not 14 <= idade <= 100:
+                raise ValidationError("Confira a data de nascimento.")
+        return data
+
     def clean_resumo(self):
         # Só valida quando preenchido: todos os campos são opcionais e exigir o
         # resumo aqui impediria de salvar qualquer outra aba.
         texto = (self.cleaned_data.get("resumo") or "").strip()
-        if texto:
-            palavras = len(texto.split())
-            if not 50 <= palavras <= 200:
-                raise ValidationError(
-                    f"O resumo deve ter entre 50 e 200 palavras "
-                    f"(o seu tem {palavras})."
-                )
+        if texto and not resumo_tem_tamanho_valido(texto):
+            raise ValidationError(
+                f"O resumo deve ter entre 50 e 200 palavras "
+                f"(o seu tem {len(texto.split())})."
+            )
         return texto
-
-    def clean_disponibilidade_semanal(self):
-        horas = self.cleaned_data.get("disponibilidade_semanal")
-        if horas is None:
-            return horas
-        servidor_ativo = self.instance.vinculo == Vinculo.SERVIDOR and self.cleaned_data.get("servidor_ativo")
-        maximo = 20 if servidor_ativo else 40
-        if not (5 <= horas <= maximo):
-            raise ValidationError(f"Disponibilidade deve estar entre 5 e {maximo} horas semanais.")
-        return horas

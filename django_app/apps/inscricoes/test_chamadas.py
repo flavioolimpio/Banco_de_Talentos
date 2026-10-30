@@ -23,6 +23,7 @@ from apps.inscricoes.models import (
     Vaga,
 )
 from apps.usuarios.models import Usuario, Vinculo
+from apps.usuarios.tests import completar_cadastro
 
 def xml_novo(atualizado=None, nome="curriculo.xml", conteudo=None):
     """Um currículo Lattes mínimo, atualizado hoje (ou na data pedida)."""
@@ -93,6 +94,7 @@ class BaseChamada(TestCase):
             vinculo=Vinculo.ESTUDANTE,
             password="senha123",
         )
+        completar_cadastro(self.usuario)
         self.client.force_login(self.usuario)
 
     def _post(self, **extra):
@@ -271,6 +273,26 @@ class PrazoDaChamadaTest(BaseChamada):
         self._fechar()
         self.assertFalse(self.chamada.aberta)
         self.assertTrue(self.chamada.encerrada)
+
+
+class CadastroIncompletoTest(BaseChamada):
+    """Item 5.3: só se inscreve quem tem o cadastro completo (item 4.4.2)."""
+
+    def setUp(self):
+        super().setUp()
+        self.usuario.lattes = ""
+        self.usuario.save()
+
+    def test_tela_mostra_o_que_falta(self):
+        resposta = self.client.get(reverse("inscricao_chamada", args=[self.chamada.pk]))
+        self.assertContains(resposta, "Complete o seu cadastro")
+        self.assertContains(resposta, "link do currículo Lattes")
+        self.assertNotContains(resposta, 'name="lattes_xml"')
+
+    def test_post_nao_cria_inscricao(self):
+        self._post()
+        self._post(action="rascunho")
+        self.assertFalse(Inscricao.objects.filter(usuario=self.usuario).exists())
 
 
 class UmaInscricaoPorChamadaTest(BaseChamada):
@@ -575,6 +597,24 @@ class ExportarConvocadosTest(BaseChamada):
     def test_exige_chamada(self):
         with self.assertRaises(CommandError):
             call_command("exportar_convocados", verbosity=0)
+
+    def test_empate_traz_o_mais_velho_primeiro(self):
+        from datetime import date
+
+        mais_velho = Usuario.objects.create_user(
+            cpf="11144477735", email="velho@test.com", nome_completo="Mais Velho",
+            vinculo=Vinculo.ESTUDANTE, password="senha123",
+        )
+        completar_cadastro(mais_velho)
+        mais_velho.data_nascimento = date(1960, 1, 1)
+        mais_velho.save(update_fields=["data_nascimento"])
+        Inscricao.objects.create(
+            usuario=mais_velho, chamada=self.chamada, modalidade=Vinculo.ESTUDANTE,
+            status=StatusInscricao.APROVADA, total_validado=Decimal("180"),
+        )
+        linhas = self._exportar(chamada=self.chamada.pk)
+        self.assertEqual(linhas[0][2], "Data de nascimento")
+        self.assertEqual([linha[0] for linha in linhas[1:]], ["Mais Velho", "Candidata Teste"])
 
     def test_chamada_inexistente_recusa(self):
         with self.assertRaises(CommandError):

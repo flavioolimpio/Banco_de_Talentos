@@ -24,6 +24,7 @@
 # Apenas consulta + exportação. NUNCA altera dados do banco.
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import F
 from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl.styles import Font
@@ -79,7 +80,12 @@ class Command(BaseCommand):
         aprovadas = (
             Inscricao.objects.filter(chamada=chamada, status=StatusInscricao.APROVADA)
             .select_related("usuario", "vaga")
-            .order_by("-total_validado")
+            # Empate na pontuação: mais velho(a) primeiro (maior idade, último
+            # critério dos Anexos). É só a ordem da lista — o desempate oficial
+            # vem depois da Entrevista, na planilha, e para estudante o CRE
+            # entra antes da idade (Edital 31). nulls_last: SQLite e Postgres
+            # discordam de onde vai a data em branco.
+            .order_by("-total_validado", F("usuario__data_nascimento").asc(nulls_last=True))
         )
         if options["modalidade"]:
             aprovadas = aprovadas.filter(modalidade=options["modalidade"])
@@ -105,7 +111,7 @@ class Command(BaseCommand):
         wb = Workbook()
         ws = wb.active
         ws.title = "Convocados"
-        ws.append(["Nome", "CPF", "Vaga", "Vínculo", "Categoria", "Titulação", "Pontuação Validada"])
+        ws.append(["Nome", "CPF", "Data de nascimento", "Vaga", "Vínculo", "Categoria", "Titulação", "Pontuação Validada"])
         for celula in ws[1]:
             celula.font = Font(bold=True)
 
@@ -114,6 +120,7 @@ class Command(BaseCommand):
             ws.append([
                 usuario.nome_completo,
                 usuario.cpf,
+                usuario.data_nascimento,
                 ins.vaga.codigo if ins.vaga else "—",
                 ins.get_modalidade_display(),
                 ins.get_tipo_servidor_display() or "—",
@@ -121,7 +128,7 @@ class Command(BaseCommand):
                 float(ins.total_validado),
             ])
 
-        for coluna, largura in zip("ABCDEFG", [40, 16, 12, 22, 18, 28, 20]):
+        for coluna, largura in zip("ABCDEFGH", [40, 16, 14, 12, 22, 18, 28, 20]):
             ws.column_dimensions[coluna].width = largura
         wb.save(caminho)
 

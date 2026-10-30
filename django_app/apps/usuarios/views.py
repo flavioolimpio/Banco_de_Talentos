@@ -9,7 +9,7 @@ from django.views.decorators.http import require_http_methods
 
 from apps.auditoria.models import AuditAction, AuditLog
 from apps.usuarios.forms import CadastroUsuarioForm, LoginForm, MeuCadastroForm, NovaSenhaForm, RecuperacaoSenhaForm
-from apps.usuarios.models import Vinculo
+from apps.usuarios.models import CAMPOS_FORA_DO_VINCULO
 
 
 LGPD_TERMO_VERSAO_ATUAL = "2026-05-14"
@@ -95,17 +95,18 @@ def home_view(request):
 # docs/Estrutura_Perfil_Cadastro_Banco_Especialistas.md. A aba "endereco"
 # deixou de existir (UF e cidade subiram para "dados"); links antigos
 # ?aba=endereco não quebram porque aba desconhecida cai em "dados".
+# A chave "perfil" é a aba Declarações: mantida com esse nome para não quebrar
+# os links ?aba=perfil espalhados pelos templates. Não tem campo de formulário,
+# só as caixas de declaração abaixo.
 _ABAS_CAMPOS = {
     "dados": [
-        "nome_completo", "email", "telefone", "uf", "cidade",
+        "nome_completo", "data_nascimento", "email", "telefone", "uf", "cidade",
         "categoria_pretendida", "servidor_ativo",
     ],
     "formacao": [
-        "maior_titulacao", "area_atuacao", "cnpq_area", "resumo", "lattes",
+        "maior_titulacao", "instituicao", "area_atuacao", "resumo", "lattes",
     ],
-    "perfil": [
-        "disponibilidade_semanal", "nao_afastado_licenciado",
-    ],
+    "perfil": [],
 }
 
 _DECLARACOES_PERFIL = [
@@ -123,15 +124,17 @@ def meu_cadastro_view(request):
     if aba not in _ABAS_CAMPOS:
         aba = "dados"
     campos_aba = list(_ABAS_CAMPOS[aba])
-    if request.user.vinculo != Vinculo.SERVIDOR:
-        campos_aba = [c for c in campos_aba if c not in ("servidor_ativo", "nao_afastado_licenciado")]
+    # Cada vínculo vê só o que o seu Edital pede: o estudante não escolhe
+    # categoria nem titulação, e só o servidor diz se está ativo.
+    fora = CAMPOS_FORA_DO_VINCULO.get(request.user.vinculo, set())
+    campos_aba = [c for c in campos_aba if c not in fora]
 
     # Lidos ANTES do is_valid(): ele chama _post_clean, que já grava os dados
     # limpos dentro de form.instance — e form.instance É o request.user. Lido
     # depois, o "valor anterior" já seria o novo, e o log não serviria de nada.
     email_anterior = request.user.email
 
-    form = MeuCadastroForm(request.POST or None, instance=request.user)
+    form = MeuCadastroForm(request.POST or None, instance=request.user, campos=campos_aba)
 
     if request.method == "POST" and form.is_valid():
         instance = form.save(commit=False)

@@ -1,0 +1,27 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Cadastro incompleto — Banco de Especialistas IFG{% endblock %}
+
+{% block page_content %}
+<div style="max-width:640px;margin:64px auto;padding:32px 24px;text-align:center">
+    <h1 style="color:#168241;font-size:24px;margin-bottom:12px">
+        Complete o seu cadastro para se inscrever
+    </h1>
+    <p style="color:#202124;font-size:15px;line-height:1.7">
+        A inscrição na {{ chamada.rotulo_curto }} é aberta a quem está com o cadastro
+        completo no Banco de Especialistas (item 5.3 do Edital). Falta preencher:
+    </p>
+    <ul style="display:inline-block;text-align:left;color:#202124;font-size:15px;line-height:1.8;margin:8px 0 0">
+        {% for item in pendencias %}<li>{{ item }}</li>{% endfor %}
+    </ul>
+    <p style="color:#555;font-size:14px;line-height:1.7;margin-top:16px">
+        As inscrições desta chamada vão até
+        {{ chamada.encerramento|date:"d/m/Y \à\s H:i" }}.
+    </p>
+    <p style="margin-top:24px">
+        <a href="{% url 'meu_cadastro' %}" style="display:inline-block;background:#168241;color:#fff;font-size:14px;font-weight:600;padding:11px 22px;border-radius:8px;text-decoration:none">
+            Completar meu cadastro
+        </a>
+    </p>
+</div>
+{% endblock %}

@@ -84,22 +84,6 @@
         </div>
     </div>
 
-    {% if perfil_incompleto %}
-    <div class="ci-aviso atencao">
-        <strong>Seu cadastro está incompleto.</strong> A análise usa os dados do seu perfil
-        para conferir a aderência à vaga.
-        <a href="{% url 'meu_cadastro' %}?aba=perfil">Completar cadastro</a>.
-    </div>
-    {% endif %}
-
-    {% if lattes_ausente %}
-    <div class="ci-aviso atencao">
-        <strong>Você ainda não informou o currículo Lattes.</strong>
-        O Edital exige o link atualizado nos últimos 6 meses (item 4.2.1).
-        <a href="{% url 'meu_cadastro' %}?aba=formacao">Informar agora</a>.
-    </div>
-    {% endif %}
-
     <div class="ci-aviso info">
         A Análise Curricular é feita a partir do <strong>currículo Lattes em XML</strong> que você
         enviar, conforme o quadro de critérios da chamada. Salvo a titulação, conta o que foi
