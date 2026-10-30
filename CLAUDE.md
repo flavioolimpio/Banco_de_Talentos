@@ -432,8 +432,9 @@ Pendências menores:
   em `django_app/static/imagens/` e descomentar.
 - `senha_sudo.txt` nunca foi rastreado e agora está no `.gitignore`; apagar do disco quando não for mais preciso.
 
-Handoffs, do mais recente: `CHAMADAS_INTERNAS/HANDOFF_retificacao4_2026-10-28.md`
-(Editais 29, 30 e 31: versões de 28/10, decisões e código sem commit — ler seções 3 e 4 primeiro),
+Handoffs, do mais recente: **`CHAMADAS_INTERNAS/HANDOFF_deploy_reforma_2026-10-30.md`**
+(roteiro completo: PROPPG → decisões de código → HTTP → push/merge → ensaio da migração → deploy → operação; ler primeiro),
+`HANDOFF_retificacao4_2026-10-28.md` (Editais 29, 30 e 31, seções 2.5 e 2.6 = o que foi feito em 30/10),
 `HANDOFF_retificacao4_2026-10-26.md` (revisão e cópia com propostas), `HANDOFF_retificacao4_2026-10-21.md`, `HANDOFF_lattes_xml_edital_2026-09-24.md` (código não commitado) e
 `HANDOFF_chamadas_internas_2026-09-20.md` (reforma e roteiro de deploy).
 Plano que originou a reforma:
