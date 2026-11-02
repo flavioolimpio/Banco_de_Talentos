@@ -542,6 +542,16 @@ class RevisaoRhTest(BaseChamada):
         self.assertNotContains(resposta, 'name="lattes_xml"')
         self.assertContains(resposta, reverse("download_lattes_xml", args=[self.inscricao.pk]))
 
+    def test_admin_nao_deixa_digitar_a_pontuacao_validada(self):
+        # Fora do legado a pontuação vem de pontuar(), na revisão do RH.
+        self._revisar()
+        resposta = self.client.get(
+            reverse("admin:inscricoes_inscricao_change", args=[self.inscricao.pk])
+        )
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotRegex(resposta.content.decode(), r'name="itens-\d+-pontuacao_validada"')
+        self.assertContains(resposta, "<p>80,00</p>")  # 2 x 40, só como texto
+
     def test_trocar_a_opcao_troca_os_pontos(self):
         item_opc = self.inscricao.itens.get(criterio=self.escolha)
         self._revisar(**{f"validado_opcao_{item_opc.pk}": str(self.mestrado.pk)})
@@ -641,6 +651,13 @@ class RevisaoLegadoTest(TestCase):
                                     f"validado_{self.item.pk}": "45"})
         self.inscricao.refresh_from_db()
         self.assertEqual(self.inscricao.total_validado, Decimal("45"))
+
+    def test_admin_deixa_digitar_a_pontuacao_validada(self):
+        resposta = self.client.get(
+            reverse("admin:inscricoes_inscricao_change", args=[self.inscricao.pk])
+        )
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'name="itens-0-pontuacao_validada"')
 
 
 class ExportarConvocadosTest(BaseChamada):

@@ -178,6 +178,13 @@ class InscricaoItemInline(admin.TabularInline):
     autocomplete_fields = ("criterio",)
     readonly_fields = ("criterio", "pontuacao")
 
+    def get_readonly_fields(self, request, obj=None):
+        # obj é a Inscricao. Fora do legado a pontuação vem de pontuar(), na
+        # revisão do RH (views_rh); só o legado guarda pontuação digitada.
+        if obj is not None and obj.e_legado:
+            return self.readonly_fields
+        return self.readonly_fields + ("pontuacao_validada",)
+
 
 def _exportar_inscricoes_csv(queryset) -> HttpResponse:
     """Gera um HttpResponse com CSV das inscrições do queryset."""
