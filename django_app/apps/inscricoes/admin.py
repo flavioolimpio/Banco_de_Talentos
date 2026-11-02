@@ -224,6 +224,9 @@ class InscricaoAdmin(admin.ModelAdmin):
     list_display = ("usuario", "modalidade", "tipo_servidor", "total_validado", "status", "link_revisar", "atualizado_em")
     list_filter = ("modalidade", "tipo_servidor", "status")
     search_fields = ("usuario__cpf", "usuario__nome_completo", "usuario__email")
+    # Campo de ID em vez de <select>: o select padrão listava nome + CPF de
+    # todos os usuários cadastrados na página de cada inscrição.
+    raw_id_fields = ("usuario",)
     readonly_fields = ("criado_em", "atualizado_em", "enviada_em", "pdf_download_link", "xml_download_link", "total_validado", "revisado_em", "revisado_por")
     # Os campos de arquivo ficam fora do formulário: o widget padrão mostra o
     # caminho em /media/, que contém o CPF, e deixaria trocar ou apagar o

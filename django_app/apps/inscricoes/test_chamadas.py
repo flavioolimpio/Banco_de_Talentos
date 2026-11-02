@@ -673,6 +673,19 @@ class RevisaoLegadoTest(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, 'name="itens-0-pontuacao_validada"')
 
+    def test_admin_da_inscricao_nao_lista_cpf_de_outros_usuarios(self):
+        # O <select> de usuário listava nome + CPF de todos os cadastrados.
+        Usuario.objects.create_user(
+            cpf="39053344705", email="outro@test.com", nome_completo="Outra Pessoa",
+            vinculo=Vinculo.SERVIDOR, password="senha123",
+        )
+        resposta = self.client.get(
+            reverse("admin:inscricoes_inscricao_change", args=[self.inscricao.pk])
+        )
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, "39053344705")
+        self.assertNotContains(resposta, "Outra Pessoa")
+
     def test_admin_avulso_de_itens_deixa_digitar_a_pontuacao_validada(self):
         resposta = self.client.get(
             reverse("admin:inscricoes_inscricaoitem_change", args=[self.item.pk])
