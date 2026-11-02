@@ -58,11 +58,12 @@ pode ser expandido para apoiar etapas de alocação e cadastro no SRInfo.
 | Assets visuais IFG | `imagens/` (originais) e `django_app/static/imagens/` (servidos) |
 | Operação de chamadas | `CHAMADAS_INTERNAS/` — fora do git, dados pessoais |
 
-### Reforma de setembro/2026 — NÃO ESTÁ EM PRODUÇÃO
+### Reforma de setembro/2026 — EM PRODUÇÃO desde 02/11/2026
 
-A reunião com a gestão em 18/09/2026 decidiu duas mudanças ligadas, hoje
-implementadas na branch **`feat/home-limpa-e-migrations`** (16 commits, 243
-testes passando, **não mergeada em `main`**; tudo commitado em 30/10/2026):
+A reunião com a gestão em 18/09/2026 decidiu duas mudanças ligadas,
+implementadas na branch `feat/home-limpa-e-migrations`, **mergeada em `main`
+(`44371d3`) e em produção desde 02/11/2026 16:10** (249 testes; migrations até
+`inscricoes 0015`, `usuarios 0004`, `auditoria 0004`):
 
 1. **O cadastro virou só perfil.** A Análise Curricular saiu do credenciamento.
 2. **A inscrição passou a ser por Chamada Interna.** Cada chamada tem as suas
@@ -79,12 +80,9 @@ itens 5.1 a 5.16. **A versão de trabalho do Edital fica no OneDrive, não no re
 — **`Edital29_2026_consolidado_Ret4.docx`** (mestre; o `.md`/`.html` de 23/09 têm o mesmo
 texto, conferido em 21/10/2026). Os demais arquivos da pasta são rascunhos superados. Editar só lá.
 
-> 🚧 **Bloqueio para o lançamento, e não é código:** a seção 6 duplicada (item
-> 6.12, formulário em conta @ifg.edu.br) **já foi suprimida no consolidado**, mas
-> o texto **ainda não foi aprovado pela PROPPG**. Em 28/10/2026 ficaram prontas as
-> versões limpas do 29 (Ret. 3/2026, `..._v05_limpo.docx`) e do 30 (Ret. 1/2026,
-> `..._v03_limpo.docx`), e a proposta com marcas do 31 (Ret. 1/2026), que aguarda
-> revisão do Prof. Flávio. Detalhes em `CHAMADAS_INTERNAS/HANDOFF_retificacao4_2026-10-28.md`.
+> ✅ **PROPPG aprovou as retificações em 02/11/2026** (publicação prevista 03/11).
+> Versões limpas dos três editais no Drive. Anotar número/data/link dos atos
+> publicados em `CHAMADAS_INTERNAS/HANDOFF_deploy_reforma_2026-10-30.md`, seção 1.1.
 
 ### Acesso à VM / deploy
 
@@ -400,30 +398,21 @@ python manage.py itens_orfaos [--chamada <id>]
 
 ## Próxima ação pendente
 
-**Colocar a reforma de setembro em produção.** Na ordem:
+**Pós-deploy da reforma (feito em 02/11/2026).** Na ordem:
 
-1. **Fechar as retificações dos Editais 29, 30 e 31 e levar à PROPPG** — é o que
-   destrava tudo (ver o bloqueio em "Estado atual do projeto"). Roteiro em
-   `CHAMADAS_INTERNAS/HANDOFF_retificacao4_2026-10-28.md`, seções 2.5, 3 e 4. Os
-   três editais limpos estão prontos no OneDrive (30/10). O código está todo
-   commitado na branch (243 testes OK em 30/10); pendentes do revisor:
-   `InscricaoItemInline` ainda deixa digitar `pontuacao_validada` no admin para
-   chamadas não-legado, e os quadros modelo de `quadros.py` seguem acima de 100
-   (patch de redistribuição em `docs/superpowers/plans/2026-10-30-quadros-modelo-100.patch`,
-   não aplicado: decisão de pesos da Coordenação).
-2. **Ensaio da migração com dump real.** `pg_dump -Fc` da VM, restaurar num
-   PostgreSQL de rascunho, rodar `migrate`. O SQLite do dev não reproduz o
-   comportamento de constraint/NOT NULL do Postgres. Parar em `0013`, conferir
-   as contagens por `chamada_id`, e só então aplicar a `0014`.
-3. **Deploy:** `systemctl stop` → backup do banco e do `media/` → `git pull` →
-   `migrate` → `collectstatic` → `systemctl start`.
-   **Parar o serviço não é preciosismo:** entre a `0012` e a `0014` não existe
-   índice de unicidade por usuário. As três rodam no mesmo `migrate`.
-4. **Avisar a gestão** de que o banner "Complete seu perfil" vai reaparecer para
-   100% dos cadastrados e que, **sem cadastro completo, a inscrição em Chamada
-   fica bloqueada** (item 5.3). `perfil_completo` exige os campos do item 4.2
-   conforme o vínculo (`CAMPOS_CADASTRO` em `apps/usuarios/models.py`) e as
-   declarações, que ninguém tem ainda.
+1. **Avisar a gestão** — rascunho em `CHAMADAS_INTERNAS/aviso_gestao_deploy_reforma_2026-11.md`:
+   o banner "Complete seu perfil" aparece para 100% dos cadastrados e, sem
+   cadastro completo, a inscrição em Chamada fica bloqueada (item 5.3).
+2. **Copiar o backup pré-reforma para fora da VM** (`~/backup_pre_reforma_2026-11-02_1551/`).
+3. **Cadastrar a primeira Chamada Interna real** no admin (vagas, datas, link do
+   aviso na PROPPG, quadro ≤ 100). `popular_criterios` copia um modelo; ajustar.
+   Validar com um estudante real o PDF de matrícula (não testado por HTTP).
+4. Dívidas conhecidas: `InscricaoItemAdmin` ainda deixa editar `quantidade`/`opcao`
+   fora do legado sem recálculo; quadros modelo de `quadros.py` somam > 100
+   (patch não aplicado em `docs/superpowers/plans/2026-10-30-quadros-modelo-100.patch`);
+   `Usuario.__str__` mostra CPF nas listas do admin.
+5. VM: Python 3.10, Postgres 14, `config.settings.server`; **a rede cai com
+   frequência** — passos longos com `nohup`; `sudo -S` só aceita senha por pipe direto.
 
 Pendências menores:
 
