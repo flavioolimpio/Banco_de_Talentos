@@ -598,12 +598,14 @@ class RevisaoRhTest(BaseChamada):
         self.assertNotContains(resposta, "IFGProduz")
 
     def test_rh_baixa_o_xml_e_fica_no_auditlog(self):
-        from apps.auditoria.models import AuditLog
+        from apps.auditoria.models import AuditAction, AuditLog
 
         resposta = self.client.get(reverse("download_lattes_xml", args=[self.inscricao.pk]))
         self.assertEqual(resposta.status_code, 200)
         self.assertIn(b"CURRICULO-VITAE", b"".join(resposta.streaming_content))
         log = AuditLog.objects.latest("id")
+        self.assertEqual(log.acao, AuditAction.LATTES_XML_DOWNLOAD)
+        self.assertEqual(log.get_acao_display(), "Download do XML do Lattes")
         self.assertEqual(log.detalhes, {"inscricao_id": self.inscricao.pk, "arquivo": "lattes_xml"})
 
     def test_candidato_nao_baixa_o_xml(self):

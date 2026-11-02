@@ -189,8 +189,7 @@ def download_comprovante(request, pk):
 @login_required
 def download_lattes_xml(request, pk):
     # O XML do Lattes traz CPF, RG, filiação e endereço: só o RH baixa, e todo
-    # download fica no AuditLog. A ação reaproveita COMPROVANTE_DOWNLOAD; o
-    # campo "arquivo" distingue o XML do PDF.
+    # download fica no AuditLog, com ação própria (não se confunde com o PDF).
     if not request.user.is_staff:
         raise PermissionDenied
     inscricao = get_object_or_404(Inscricao, pk=pk)
@@ -199,7 +198,7 @@ def download_lattes_xml(request, pk):
     AuditLog.objects.create(
         ator=request.user,
         alvo=inscricao.usuario,
-        acao=AuditAction.COMPROVANTE_DOWNLOAD,
+        acao=AuditAction.LATTES_XML_DOWNLOAD,
         ip=_get_client_ip(request),
         user_agent=request.META.get("HTTP_USER_AGENT", ""),
         detalhes={"inscricao_id": pk, "arquivo": "lattes_xml"},
