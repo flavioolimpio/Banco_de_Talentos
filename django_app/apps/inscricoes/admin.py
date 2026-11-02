@@ -181,9 +181,10 @@ class InscricaoItemInline(admin.TabularInline):
     def get_readonly_fields(self, request, obj=None):
         # obj é a Inscricao. Fora do legado a pontuação vem de pontuar(), na
         # revisão do RH (views_rh); só o legado guarda pontuação digitada.
+        campos = tuple(super().get_readonly_fields(request, obj))
         if obj is not None and obj.e_legado:
-            return self.readonly_fields
-        return self.readonly_fields + ("pontuacao_validada",)
+            return campos
+        return campos + ("pontuacao_validada",)
 
 
 def _exportar_inscricoes_csv(queryset) -> HttpResponse:
@@ -295,3 +296,11 @@ class InscricaoItemAdmin(admin.ModelAdmin):
     list_display = ("inscricao", "criterio", "pontuacao", "pontuacao_validada")
     search_fields = ("inscricao__usuario__cpf", "inscricao__usuario__nome_completo", "criterio__criterio")
     autocomplete_fields = ("inscricao", "criterio")
+
+    def get_readonly_fields(self, request, obj=None):
+        # Mesma regra do inline: pontuacao é sempre calculada e
+        # pontuacao_validada só é digitada no legado (obj é o item).
+        campos = tuple(super().get_readonly_fields(request, obj)) + ("pontuacao",)
+        if obj is not None and obj.inscricao.e_legado:
+            return campos
+        return campos + ("pontuacao_validada",)
