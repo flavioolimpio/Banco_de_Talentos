@@ -8,19 +8,21 @@
 # ⚠️ DADOS PESSOAIS — NUNCA COMMITAR (LGPD)
 data/
 media/
-Lattes/
+CHAMADAS_INTERNAS/
+# saída do exportar_lattes_xml: XMLs com CPF e RG
+lattes_chamada_*/
 *.db
 *.sqlite3
 *.csv
 *.xlsx
 *.pdf
-indicacoes-quadros-2026/
-convocacao-aviso-proppg-01-2026/
 
 # Segredos
 .env
 .env.*
 !.env.example
+deploy/env_prod
+flavioprivada
 
 # Python
 __pycache__/
@@ -50,3 +52,9 @@ staticfiles/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Credenciais locais - NUNCA COMMITAR
+senha_sudo.txt
+.env
+*.pem
+*.key

@@ -29,6 +29,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
+            "--chamada",
+            type=int,
+            help="Limita a exportação a uma chamada (padrão: todas, misturadas).",
+        )
+        parser.add_argument(
             "--saida",
             default=f"aprovadas_{timezone.localdate()}.csv",
             help=(
@@ -40,9 +45,11 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         aprovadas = (
             Inscricao.objects.filter(status=StatusInscricao.APROVADA)
-            .select_related("usuario")
-            .order_by("modalidade", "-total_validado")
+            .select_related("usuario", "chamada")
+            .order_by("chamada", "modalidade", "-total_validado")
         )
+        if options["chamada"]:
+            aprovadas = aprovadas.filter(chamada_id=options["chamada"])
 
         total = aprovadas.count()
         self.stdout.write("")
@@ -64,7 +71,7 @@ class Command(BaseCommand):
         with open(caminho, "w", newline="", encoding="utf-8-sig") as arquivo:
             writer = csv.writer(arquivo, delimiter=";")
             writer.writerow(
-                ["Nome", "Modalidade", "Categoria", "Email", "Pontuação"]
+                ["Chamada", "Nome", "Modalidade", "Categoria", "Email", "Pontuação"]
             )
             for ins in aprovadas:
                 usuario = ins.usuario
@@ -78,6 +85,7 @@ class Command(BaseCommand):
                     pontuacao = f"{ins.total_validado:.2f}".replace(".", ",")
                 writer.writerow(
                     [
+                        str(ins.chamada),
                         usuario.nome_completo,
                         ins.get_modalidade_display(),
                         categoria,

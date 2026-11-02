@@ -1,0 +1,176 @@
+{% extends "base_dashboard.html" %}
+{% load static %}
+
+{% block title %}Inscrição — {{ chamada.rotulo_curto }}{% endblock %}
+
+{% block page_content %}
+<style>
+.ci-wrap { max-width: 720px; margin: 28px auto 60px; padding: 0 16px; }
+.ci-topo {
+    background: #fff; border: 1px solid #e5e7eb; border-top: 6px solid #168241;
+    border-radius: 10px; padding: 22px 24px; margin-bottom: 18px;
+}
+.ci-eyebrow { font-size: 12px; font-weight: 700; color: #168241; letter-spacing: .4px; text-transform: uppercase; }
+.ci-titulo { font-size: 22px; font-weight: 800; color: #202124; margin: 6px 0 4px; line-height: 1.25; }
+.ci-sub { font-size: 14px; color: #555; margin: 0 0 10px; }
+.ci-meta { font-size: 13px; color: #6b7280; }
+.ci-aviso {
+    border-radius: 8px; padding: 12px 16px; margin-bottom: 14px;
+    font-size: 13px; line-height: 1.6;
+}
+.ci-aviso.atencao { background: #fff8e1; border: 1px solid #f0d97a; color: #7a5a00; }
+.ci-aviso.info    { background: #eef5ff; border: 1px solid #c7ddff; color: #24487a; }
+.ci-card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 20px 24px; margin-bottom: 14px;
+}
+.ci-card.erro { border-color: #e65100; }
+.ci-num { font-size: 12px; color: #9aa0a6; font-weight: 700; letter-spacing: .4px; }
+.ci-pergunta { font-size: 15px; font-weight: 700; color: #202124; margin: 4px 0 8px; line-height: 1.45; }
+.ci-regra { font-size: 13px; color: #5f6368; line-height: 1.6; margin: 0 0 14px; }
+.ci-resposta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ci-resposta input[type=number] {
+    width: 96px; padding: 9px 10px; border: 1px solid #ccc; border-radius: 8px;
+    font-size: 16px; font-weight: 600; text-align: center;
+}
+.ci-resposta select, .ci-campo select, .ci-campo input[type=number] {
+    padding: 9px 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px;
+    max-width: 100%;
+}
+.ci-pontos {
+    font-size: 13px; font-weight: 700; color: #168241;
+    background: #eaf6ee; border-radius: 20px; padding: 5px 14px; white-space: nowrap;
+}
+.ci-campo { margin-bottom: 18px; }
+.ci-campo label.titulo { display: block; font-weight: 700; font-size: 14px; color: #202124; margin-bottom: 6px; }
+.ci-ajuda { font-size: 12px; color: #777; margin-top: 5px; line-height: 1.55; }
+.ci-decl {
+    display: flex; gap: 10px; align-items: flex-start; padding: 13px 15px;
+    background: #f7f9f6; border: 1px solid #e0e0e0; border-radius: 8px;
+    margin-bottom: 9px; cursor: pointer; font-size: 13px; line-height: 1.6; color: #333;
+}
+.ci-total {
+    position: sticky; bottom: 0; background: #fff; border: 1px solid #e5e7eb;
+    border-radius: 10px; padding: 16px 24px; margin-top: 18px;
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 16px; flex-wrap: wrap; box-shadow: 0 -2px 12px rgba(0,0,0,.06);
+}
+.ci-total-num { font-size: 26px; font-weight: 800; color: #202124; }
+.ci-botoes { display: flex; gap: 10px; flex-wrap: wrap; }
+.ci-btn {
+    border: none; border-radius: 8px; padding: 11px 22px; font-size: 14px;
+    font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.ci-btn.primario { background: #168241; color: #fff; }
+.ci-btn.primario:hover { background: #126834; }
+.ci-btn.secundario { background: #f0f0f0; color: #202124; }
+.ci-erros { color: #c62828; font-size: 12.5px; margin-top: 6px; }
+.ci-erros ul { margin: 0; padding-left: 18px; }
+@media (max-width: 640px) { .ci-card, .ci-topo, .ci-total { padding: 16px; } }
+</style>
+
+<div class="ci-wrap">
+
+    <div class="ci-topo">
+        <div class="ci-eyebrow">Chamada Interna {{ chamada.numero|stringformat:"02d" }}/{{ chamada.ano }}</div>
+        <h1 class="ci-titulo">{{ chamada.titulo }}</h1>
+        {% if chamada.projeto %}<p class="ci-sub">{{ chamada.projeto }}</p>{% endif %}
+        <div class="ci-meta">
+            Inscrições até <strong>{{ chamada.encerramento|date:"d/m/Y \à\s H:i" }}</strong>
+            {% if chamada.edital %} &middot; {{ chamada.edital }}{% endif %}
+            {% if chamada.aviso_url %}
+            &middot; <a href="{{ chamada.aviso_url }}" target="_blank" rel="noopener">Ver o aviso completo</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="ci-aviso info">
+        A Análise Curricular é feita a partir do <strong>currículo Lattes em XML</strong> que você
+        enviar, conforme o quadro de critérios da chamada. Salvo a titulação, conta o que foi
+        registrado nos <strong>últimos 5 anos</strong> (item 5.8). Confira se o seu Lattes está
+        completo antes de exportar: o que não estiver nele não é pontuado.
+    </div>
+
+    <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+
+        {# ---------------------------------------------------- vaga pretendida #}
+        <div class="ci-card{% if form.vaga.errors %} erro{% endif %}">
+            <div class="ci-num">VAGA</div>
+            <div class="ci-pergunta">{{ form.vaga.label }}</div>
+            <p class="ci-regra">
+                Você concorre a uma única vaga nesta Chamada Interna.
+            </p>
+            {{ form.vaga }}
+            <div class="ci-erros">{{ form.vaga.errors }}</div>
+        </div>
+
+        {# ------------------------------------------------------ currículo Lattes #}
+        <div class="ci-card{% if form.lattes_xml.errors %} erro{% endif %}">
+            <div class="ci-num">CURRÍCULO LATTES</div>
+            <div class="ci-pergunta">{{ form.lattes_xml.label }}</div>
+            <p class="ci-regra">{{ form.lattes_xml.help_text }}</p>
+            {% if inscricao.lattes_xml %}
+            <p class="ci-regra" style="color:#168241">
+                Já enviado: <strong>{{ inscricao.lattes_xml_nome_original }}</strong>.
+                Enviar um arquivo novo substitui o anterior.
+            </p>
+            {% endif %}
+            {{ form.lattes_xml }}
+            <div class="ci-erros">{{ form.lattes_xml.errors }}</div>
+        </div>
+
+        {# ------------------------------- matrícula e histórico (só estudante) #}
+        {% if form.matricula_pdf %}
+        <div class="ci-card{% if form.matricula_pdf.errors %} erro{% endif %}">
+            <div class="ci-num">MATRÍCULA E HISTÓRICO</div>
+            <div class="ci-pergunta">{{ form.matricula_pdf.label }}</div>
+            <p class="ci-regra">{{ form.matricula_pdf.help_text }}</p>
+            {% if inscricao.comprovantes_pdf %}
+            <p class="ci-regra" style="color:#168241">
+                Já enviado: <strong>{{ inscricao.comprovantes_pdf_nome_original }}</strong>.
+                Enviar um arquivo novo substitui o anterior.
+            </p>
+            {% endif %}
+            {{ form.matricula_pdf }}
+            <div class="ci-erros">{{ form.matricula_pdf.errors }}</div>
+        </div>
+        {% endif %}
+
+        {# -------------------------------------------------------- declaração #}
+        <div class="ci-card">
+            <div class="ci-num">DISPONIBILIDADE</div>
+
+            <div class="ci-campo" style="margin-top:6px">
+                <label class="titulo" for="{{ form.licencas_maternidade.id_for_label }}">
+                    {{ form.licencas_maternidade.label }}
+                </label>
+                {{ form.licencas_maternidade }}
+                <div class="ci-ajuda">{{ form.licencas_maternidade.help_text }}</div>
+                <div class="ci-erros">{{ form.licencas_maternidade.errors }}</div>
+            </div>
+
+            <label class="ci-decl" for="{{ form.declara_disponibilidade.id_for_label }}">
+                {{ form.declara_disponibilidade }}
+                <span>{{ form.declara_disponibilidade.label }}</span>
+            </label>
+            <div class="ci-erros">{{ form.declara_disponibilidade.errors }}</div>
+        </div>
+
+        <div class="ci-total">
+            <div style="font-size:12px;color:#888">
+                Você pode salvar e voltar depois, até o fim do prazo.
+            </div>
+            <div class="ci-botoes">
+                <button type="submit" name="action" value="rascunho" class="ci-btn secundario">
+                    Salvar rascunho
+                </button>
+                <button type="submit" name="action" value="enviar" class="ci-btn primario">
+                    Enviar inscrição
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

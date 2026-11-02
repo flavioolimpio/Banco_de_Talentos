@@ -4,11 +4,12 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import PasswordResetConfirmView, PasswordResetDoneView, PasswordResetView
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from apps.auditoria.models import AuditAction, AuditLog
 from apps.usuarios.forms import CadastroUsuarioForm, LoginForm, MeuCadastroForm, NovaSenhaForm, RecuperacaoSenhaForm
-from apps.usuarios.models import Vinculo
+from apps.usuarios.models import CAMPOS_FORA_DO_VINCULO
 
 
 LGPD_TERMO_VERSAO_ATUAL = "2026-05-14"
@@ -69,6 +70,8 @@ def cadastro_view(request):
     if request.method == "POST" and form.is_valid():
         user = form.save(commit=False)
         user.registrar_aceite_lgpd(LGPD_TERMO_VERSAO_ATUAL, get_client_ip(request))
+        if form.cleaned_data.get("consentimento_verificacao_bases"):
+            user.confirmar_declaracao("consentimento_verificacao_bases")
         user.save()
         audit(request, AuditAction.CADASTRO_CRIADO, alvo=user, detalhes={"vinculo": user.vinculo})
         messages.success(request, "Cadastro realizado com sucesso. Faça login para continuar.")
@@ -79,29 +82,39 @@ def cadastro_view(request):
 
 @login_required
 def home_view(request):
-    from apps.inscricoes.models import Inscricao
-    inscricao = None
-    try:
-        inscricao = Inscricao.objects.get(usuario=request.user)
-    except Inscricao.DoesNotExist:
-        pass
-    return render(request, "usuarios/home.html", {"inscricao": inscricao})
+    # Import local para não criar dependência circular entre os apps usuarios
+    # e inscricoes na carga dos models.
+    from apps.inscricoes.views_chamadas import chamadas_abertas_para
+
+    return render(
+        request,
+        "usuarios/home.html",
+        {"chamadas_abertas": chamadas_abertas_para(request.user)},
+    )
 
 
+# Três abas, conforme os blocos A–G de
+# docs/Estrutura_Perfil_Cadastro_Banco_Especialistas.md. A aba "endereco"
+# deixou de existir (UF e cidade subiram para "dados"); links antigos
+# ?aba=endereco não quebram porque aba desconhecida cai em "dados".
+# A chave "perfil" é a aba Declarações: mantida com esse nome para não quebrar
+# os links ?aba=perfil espalhados pelos templates. Não tem campo de formulário,
+# só as caixas de declaração abaixo.
 _ABAS_CAMPOS = {
     "dados": [
-        "nome_completo", "telefone", "data_nascimento",
-        "genero", "resumo",
-    ],
-    "endereco": ["uf", "cidade"],
-    "formacao": ["nivel_formacao", "area_atuacao", "lattes", "linkedin", "instituicao"],
-    "perfil": [
+        "nome_completo", "data_nascimento", "email", "telefone", "uf", "cidade",
         "categoria_pretendida", "servidor_ativo",
-        "disponibilidade_semanal", "nao_afastado_licenciado",
     ],
+    "formacao": [
+        "maior_titulacao", "instituicao", "area_atuacao", "resumo", "lattes",
+    ],
+    "perfil": [],
 }
 
-_DECLARACOES_PERFIL = ["ciencia_credenciamento", "declaracao_veracidade", "consentimento_verificacao_bases"]
+# O consentimento de verificação em bases passou para a tela de cadastro
+# inicial (23/09/2026). Continua em DECLARACOES_CADASTRO só para quem se
+# cadastrou antes: o template só mostra a caixa enquanto ela não foi marcada.
+# O colaborador externo não a firma (DECLARACOES_FORA_DO_VINCULO).
 
 
 @login_required
@@ -111,17 +124,24 @@ def meu_cadastro_view(request):
     if aba not in _ABAS_CAMPOS:
         aba = "dados"
     campos_aba = list(_ABAS_CAMPOS[aba])
-    if aba == "perfil" and request.user.vinculo != Vinculo.SERVIDOR:
-        campos_aba = [c for c in campos_aba if c not in ("servidor_ativo", "nao_afastado_licenciado")]
+    # Cada vínculo vê só o que o seu Edital pede: o estudante não escolhe
+    # categoria nem titulação, e só o servidor diz se está ativo.
+    fora = CAMPOS_FORA_DO_VINCULO.get(request.user.vinculo, set())
+    campos_aba = [c for c in campos_aba if c not in fora]
 
-    form = MeuCadastroForm(request.POST or None, instance=request.user)
+    # Lidos ANTES do is_valid(): ele chama _post_clean, que já grava os dados
+    # limpos dentro de form.instance — e form.instance É o request.user. Lido
+    # depois, o "valor anterior" já seria o novo, e o log não serviria de nada.
+    email_anterior = request.user.email
+
+    form = MeuCadastroForm(request.POST or None, instance=request.user, campos=campos_aba)
 
     if request.method == "POST" and form.is_valid():
         instance = form.save(commit=False)
         update_fields = list(campos_aba)
         declaracoes_confirmadas = []
         if aba == "perfil":
-            for campo in _DECLARACOES_PERFIL:
+            for campo in instance.declaracoes_exigidas():
                 if request.POST.get(campo) == "on":
                     instance.confirmar_declaracao(campo)
                     update_fields += [campo, f"{campo}_em"]
@@ -130,6 +150,12 @@ def meu_cadastro_view(request):
         detalhes = {"aba": aba}
         if declaracoes_confirmadas:
             detalhes["declaracoes"] = declaracoes_confirmadas
+        # O e-mail é credencial de login (o backend aceita CPF ou e-mail) e o
+        # canal de recuperação de senha: a troca vai para o AuditLog com os dois
+        # valores, para o RH conseguir reconstruir quem mudou o quê.
+        if instance.email != email_anterior:
+            detalhes["email_anterior"] = email_anterior
+            detalhes["email_novo"] = instance.email
         audit(request, AuditAction.CADASTRO_ATUALIZADO, alvo=request.user, detalhes=detalhes)
         messages.success(request, "Dados atualizados com sucesso.")
         return redirect(f"{reverse('meu_cadastro')}?aba={aba}")
@@ -142,6 +168,7 @@ def meu_cadastro_view(request):
         "aba": aba,
         "campos_aba": campos_aba,
         "cpf_formatado": cpf_formatado,
+        "declaracoes_exigidas": request.user.declaracoes_exigidas(),
     })
 
 

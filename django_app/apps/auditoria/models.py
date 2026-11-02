@@ -11,6 +11,7 @@ class AuditAction(models.TextChoices):
     PONTUACAO_ALTERADA = "pontuacao_alterada", "Pontuação alterada"
     COMPROVANTE_UPLOAD = "comprovante_upload", "Upload de comprovante"
     COMPROVANTE_DOWNLOAD = "comprovante_download", "Download de comprovante"
+    LATTES_XML_DOWNLOAD = "download_lattes_xml", "Download do XML do Lattes"
     CSV_EXPORTADO = "csv_exportado", "CSV exportado"
     DADOS_EXPORTADOS_TITULAR = "dados_exportados_titular", "Dados do titular exportados"
     DADOS_EXCLUIDOS_TITULAR = "dados_excluidos_titular", "Dados do titular excluídos"

@@ -136,164 +136,29 @@ def _render_form(request, form, criterios, inscricao, scores=None, lattes_ausent
 
 
 @login_required
-@require_http_methods(["GET", "POST"])
 def inscricao_view(request):
-    usuario = request.user
+    """Rota antiga de inscrição — aposentada pela Retificação 4.
 
-    try:
-        inscricao = Inscricao.objects.get(usuario=usuario)
-        # Trava o formulário depois de enviado. Exceção: se o RH devolveu a
-        # inscrição para "Pendente" no admin, o candidato pode reabrir e
-        # reenviar (ex.: após uma mudança de regras do edital).
-        if inscricao.enviada_em and inscricao.status != StatusInscricao.PENDENTE:
-            return redirect("inscricao_confirmacao")
-    except Inscricao.DoesNotExist:
-        inscricao = None
+    A Análise Curricular deixou de existir no credenciamento e passou a
+    acontecer dentro de cada Chamada Interna (Seção 5: itens 5.1 a 5.13 nos
+    Editais 29 e 30; 5.1 a 5.14 no 31). Quem chegar
+    aqui por link salvo ou favorito é levado à lista de chamadas.
 
-    # Suspensão temporária das inscrições (flag no .env). Fica DEPOIS do
-    # redirect acima (quem já enviou continua vendo a confirmação) e ANTES
-    # do GET/POST: uma única checagem bloqueia também reenvios diretos por
-    # formulário salvo/curl — validação sempre no backend.
-    if not settings.INSCRICOES_ABERTAS:
-        return render(request, "inscricoes/suspensas.html")
-
-    if request.method == "GET":
-        # A categoria (tipo_servidor) define qual quadro de critérios mostrar.
-        # Para Colaborador Externo, Pesquisador e Apoio Técnico têm quadros
-        # diferentes, então o JS recarrega a página com ?tipo=... ao trocar o
-        # seletor. Prioridade: parâmetro da URL > inscrição existente > vazio.
-        tipos_validos = {c[0] for c in TipoServidor.choices}
-        tipo_param = request.GET.get("tipo", "")
-        if tipo_param in tipos_validos:
-            tipo_servidor = tipo_param
-        elif inscricao:
-            tipo_servidor = inscricao.tipo_servidor
-        else:
-            tipo_servidor = ""
-        criterios = list(_get_criterios(usuario, tipo_servidor))
-        itens_existentes = {}
-        if inscricao:
-            for item in inscricao.itens.select_related("criterio"):
-                itens_existentes[item.criterio_id] = item.pontuacao
-
-        api_scores, api_falhou = _resolve_api_scores(usuario, criterios, inscricao)
-        itens_existentes.update(api_scores)
-
-        lattes_ausente = usuario.vinculo == Vinculo.SERVIDOR and not usuario.lattes
-        return _render_form(
-            request,
-            InscricaoForm(usuario=usuario, initial={"tipo_servidor": tipo_servidor}),
-            criterios, inscricao,
-            itens_existentes, lattes_ausente=lattes_ausente, api_falhou=api_falhou,
-        )
-
-    # POST
-    action = request.POST.get("action", "rascunho")
-    needs_subtipo = usuario.vinculo in (Vinculo.SERVIDOR, Vinculo.COLABORADOR_EXTERNO)
-    tipo_servidor = request.POST.get("tipo_servidor", "") if needs_subtipo else ""
-    criterios = list(_get_criterios(usuario, tipo_servidor))
-    form = InscricaoForm(
-        request.POST, request.FILES, usuario=usuario, acao=action,
-        tem_pdf=bool(inscricao and inscricao.comprovantes_pdf),
-    )
-
-    if not form.is_valid():
-        scores, _ = _parse_scores(request.POST, criterios)
-        api_scores, api_falhou = _resolve_api_scores(usuario, criterios, inscricao)
-        scores.update(api_scores)
-        lattes_ausente = usuario.vinculo == Vinculo.SERVIDOR and not usuario.lattes
-        return _render_form(request, form, criterios, inscricao, scores, lattes_ausente=lattes_ausente, api_falhou=api_falhou)
-
-    with transaction.atomic():
-        if inscricao is None:
-            inscricao = Inscricao(usuario=usuario, modalidade=usuario.vinculo)
-
-        if needs_subtipo:
-            inscricao.tipo_servidor = form.cleaned_data["tipo_servidor"]
-
-        pdf = form.cleaned_data.get("comprovantes_pdf")
-        if pdf:
-            inscricao.comprovantes_pdf = pdf
-            inscricao.comprovantes_pdf_nome_original = pdf.name
-            inscricao.comprovantes_pdf_tamanho = pdf.size
-            inscricao.comprovantes_pdf_mime = getattr(pdf, "content_type", "application/pdf")
-
-        scores, total_manual = _parse_scores(request.POST, criterios)
-        api_scores, _ = _resolve_api_scores(usuario, criterios, inscricao)
-        scores.update(api_scores)
-        total_api = sum(api_scores.values())
-
-        if usuario.vinculo == Vinculo.SERVIDOR:
-            # Nota final = (IFGProduz + critérios manuais) / 2, cada um capped em 100
-            total = (min(total_manual, Decimal("100")) + min(total_api, Decimal("100"))) / 2
-        else:
-            total = total_manual + total_api
-        inscricao.total = total
-
-        if action == "enviar":
-            inscricao.status = StatusInscricao.EM_ANALISE
-            inscricao.enviada_em = timezone.now()
-        else:
-            inscricao.status = StatusInscricao.PENDENTE
-
-        inscricao.save()
-
-        for criterio in criterios:
-            InscricaoItem.objects.update_or_create(
-                inscricao=inscricao,
-                criterio=criterio,
-                defaults={"pontuacao": scores.get(criterio.pk, Decimal("0"))},
-            )
-
-        # Remove itens que não fazem mais parte do quadro atual (ex.: critérios
-        # de um quadro antigo após mudança de regras). Sem isso, ao reenviar a
-        # inscrição os itens obsoletos ficariam órfãos e apareceriam na revisão.
-        criterio_ids_atuais = [c.pk for c in criterios]
-        inscricao.itens.exclude(criterio_id__in=criterio_ids_atuais).delete()
-
-        AuditLog.objects.create(
-            ator=usuario,
-            acao=AuditAction.INSCRICAO_SALVA,
-            ip=_get_client_ip(request),
-            user_agent=request.META.get("HTTP_USER_AGENT", ""),
-            detalhes={"action": action, "total": str(total)},
-        )
-
-    if action == "enviar":
-        messages.success(request, "Inscrição enviada com sucesso!")
-        return redirect("inscricao_confirmacao")
-
-    messages.success(request, "Rascunho salvo com sucesso.")
-    return redirect("inscricao")
+    O fluxo antigo não foi reescrito: as inscrições já enviadas continuam
+    visíveis como histórico, somente leitura.
+    """
+    return redirect("chamadas")
 
 
 @login_required
 def confirmacao_view(request):
-    try:
-        inscricao = Inscricao.objects.get(usuario=request.user)
-    except Inscricao.DoesNotExist:
-        return redirect("inscricao")
+    """Rota antiga da confirmação — aposentada junto com a inscrição única.
 
-    itens = inscricao.itens.select_related("criterio").order_by("criterio__ordem")
-    num_manual = 0
-    itens_com_num = []
-    total_api = Decimal("0")
-    total_manual = Decimal("0")
-    for item in itens:
-        if item.criterio.is_api:
-            itens_com_num.append((item, None))
-            total_api += item.pontuacao
-        else:
-            num_manual += 1
-            itens_com_num.append((item, num_manual))
-            total_manual += item.pontuacao
-
-    is_servidor = inscricao.modalidade == Vinculo.SERVIDOR
-    ctx = {"inscricao": inscricao, "itens_com_num": itens_com_num, "is_servidor": is_servidor}
-    if is_servidor:
-        ctx["formula_ifgproduz"] = min(total_api, Decimal("100"))
-        ctx["formula_criterios"] = min(total_manual, Decimal("100"))
-    return render(request, "inscricoes/confirmacao.html", ctx)
+    Agora existe uma inscrição por chamada, então não há "a" inscrição do
+    candidato para mostrar. A lista de Minhas Inscrições faz esse papel, com
+    link para o comprovante de cada uma.
+    """
+    return redirect("chamadas")
 
 
 @login_required
@@ -318,4 +183,28 @@ def download_comprovante(request, pk):
         file_handle,
         as_attachment=True,
         filename=inscricao.comprovantes_pdf_nome_original or "comprovantes.pdf",
+    )
+
+
+@login_required
+def download_lattes_xml(request, pk):
+    # O XML do Lattes traz CPF, RG, filiação e endereço: só o RH baixa, e todo
+    # download fica no AuditLog, com ação própria (não se confunde com o PDF).
+    if not request.user.is_staff:
+        raise PermissionDenied
+    inscricao = get_object_or_404(Inscricao, pk=pk)
+    if not inscricao.lattes_xml:
+        raise Http404("Esta inscrição não possui currículo Lattes em XML.")
+    AuditLog.objects.create(
+        ator=request.user,
+        alvo=inscricao.usuario,
+        acao=AuditAction.LATTES_XML_DOWNLOAD,
+        ip=_get_client_ip(request),
+        user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        detalhes={"inscricao_id": pk, "arquivo": "lattes_xml"},
+    )
+    return FileResponse(
+        inscricao.lattes_xml.open("rb"),
+        as_attachment=True,
+        filename=f"lattes_inscricao_{pk}.xml",
     )

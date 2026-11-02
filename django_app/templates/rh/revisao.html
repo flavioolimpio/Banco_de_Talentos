@@ -303,8 +303,7 @@
 }
 </style>
 
-<div class="revisao-wrapper" id="revisao-dados"
-     data-servidor="{% if inscricao.modalidade == 'servidor' %}true{% else %}false{% endif %}">
+<div class="revisao-wrapper" id="revisao-dados">
 
     {# ── Cabeçalho ──────────────────────────────────────────── #}
     <div class="revisao-header">
@@ -317,6 +316,22 @@
                     <span class="badge-tipo">{{ inscricao.get_tipo_servidor_display }}</span>
                 {% endif %}
                 <span>Enviada em {{ inscricao.enviada_em|date:"d/m/Y H:i" }}</span>
+            </div>
+            <div class="header-meta" style="margin-top:4px">
+                <span>
+                    {% if inscricao.chamada.legado %}
+                        Credenciamento (registro anterior)
+                    {% else %}
+                        Chamada Interna {{ inscricao.chamada.numero|stringformat:"02d" }}/{{ inscricao.chamada.ano }}
+                        &mdash; {{ inscricao.chamada.titulo }}
+                    {% endif %}
+                </span>
+                {% if inscricao.vaga %}
+                <span>&middot; Vaga {{ inscricao.vaga.codigo }} &mdash; {{ inscricao.vaga.funcao }}</span>
+                {% endif %}
+                {% if inscricao.licencas_maternidade %}
+                <span>&middot; {{ inscricao.licencas_maternidade }} licença(s) à gestante/adotante declarada(s)</span>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -335,10 +350,25 @@
                            style="font-size:12px;color:#168241;text-decoration:none;font-weight:600">
                             &#11015; Baixar PDF
                         </a>
+                        {% if inscricao.lattes_xml %}
+                        &nbsp;·&nbsp;
+                        <a href="{% url 'download_lattes_xml' inscricao.pk %}"
+                           style="font-size:12px;color:#168241;text-decoration:none;font-weight:600">
+                            &#11015; Baixar o XML
+                        </a>
+                        {% endif %}
                     </div>
                     <iframe src="{% url 'view_comprovante' inscricao.pk %}"
                             title="Comprovante PDF de {{ inscricao.usuario.nome_completo }}">
                     </iframe>
+                {% elif inscricao.lattes_xml %}
+                    <div class="pdf-empty">
+                        Esta inscrição enviou o currículo Lattes em XML.<br>
+                        <a href="{% url 'download_lattes_xml' inscricao.pk %}"
+                           style="color:#168241;font-weight:600">&#11015; Baixar o XML</a><br>
+                        <span style="font-size:12px">Apure as quantidades com a skill lattes-xml-extrator
+                        (ou com <code>exportar_lattes_xml</code> para a chamada inteira) e lance ao lado.</span>
+                    </div>
                 {% else %}
                     <div class="pdf-empty">Nenhum PDF enviado.</div>
                 {% endif %}
@@ -350,47 +380,89 @@
                 {# lista de critérios com scroll #}
                 <div class="criterios-scroll">
 
-                    {% for item, valor_validado in itens_com_score %}
+                    {% for linha in itens_com_score %}
                     <div class="criterio-card">
                         <div class="criterio-titulo">
-                            {{ forloop.counter }}. {{ item.criterio.criterio }}
+                            {{ linha.numero }}. {{ linha.criterio.criterio }}
                         </div>
                         <div class="criterio-maximo">
-                            M&aacute;ximo: {{ item.criterio.maximo|floatformat:"-2" }} pts
+                            {{ linha.criterio.regra }} &middot;
+                            M&aacute;ximo: {{ linha.criterio.maximo|floatformat:"-2" }} pts
                         </div>
                         <div class="criterio-campos">
 
-                            {# pontuação declarada pelo candidato #}
+                            {# o que o candidato respondeu. Inscrição com XML do Lattes #}
+                            {# não tem resposta: o RH lança direto o que apurou.      #}
+                            {% if not inscricao.lattes_xml %}
                             <div class="campo-bloco">
-                                <span class="campo-label">Candidato(a)</span>
-                                <div class="campo-candidato">{{ item.pontuacao|floatformat:1 }}</div>
+                                <span class="campo-label">Declarado</span>
+                                <div class="campo-candidato">
+                                    {% if linha.legado %}{{ linha.item.pontuacao|floatformat:1 }}
+                                    {% elif linha.e_escolha %}{{ linha.item.opcao.rotulo|default:"&mdash;" }}
+                                    {% else %}{{ linha.item.quantidade }} {{ linha.criterio.unidade_rotulo }}
+                                    {% endif %}
+                                    <div style="font-size:11px;color:#888;font-weight:400">
+                                        {{ linha.item.pontuacao|floatformat:"-2" }} pts
+                                    </div>
+                                </div>
                             </div>
+                            {% endif %}
 
-                            {# pontuação validada pelo RH #}
+                            {# o que o RH valida #}
                             <div class="campo-bloco">
-                                <span class="campo-label">Validado</span>
-                                <input
-                                    class="campo-validado"
-                                    id="validado_{{ item.pk }}"
-                                    name="validado_{{ item.pk }}"
-                                    type="number"
-                                    min="0"
-                                    max="{{ item.criterio.maximo|stringformat:'.2f' }}"
-                                    step="0.1"
-                                    placeholder="{{ item.pontuacao|floatformat:1 }}"
-                                    data-candidato="{{ item.pontuacao|stringformat:'.2f' }}"
-                                    {% if item.criterio.is_api %}data-api="true"{% endif %}
-                                    value="{{ valor_validado|stringformat:'.2f' }}"
-                                >
+                                <span class="campo-label">
+                                    {% if linha.legado %}Validado
+                                    {% elif linha.e_escolha and inscricao.lattes_xml %}Op&ccedil;&atilde;o apurada no XML
+                                    {% elif linha.e_escolha %}Confirme a op&ccedil;&atilde;o
+                                    {% elif inscricao.lattes_xml %}Quantidade apurada no XML
+                                    {% else %}Confirme a quantidade{% endif %}
+                                </span>
+
+                                {% if linha.legado %}
+                                {# Critério do credenciamento antigo: não tem pontos por
+                                   unidade nem opções, então a pontuação segue digitada —
+                                   recalcular zeraria a inscrição histórica. #}
+                                <input class="campo-validado"
+                                       id="validado_{{ linha.item.pk }}"
+                                       name="validado_{{ linha.item.pk }}"
+                                       type="number" min="0"
+                                       max="{{ linha.criterio.maximo|stringformat:'.2f' }}"
+                                       step="0.1"
+                                       placeholder="{{ linha.item.pontuacao|floatformat:1 }}"
+                                       value="{{ linha.validado_pontos }}">
+
+                                {% elif linha.e_escolha %}
+                                <select class="campo-validado"
+                                        name="validado_opcao_{{ linha.item.pk }}"
+                                        data-valida data-tipo="escolha">
+                                    <option value="">Nenhuma</option>
+                                    {% for opcao in linha.criterio.opcoes.all %}
+                                    <option value="{{ opcao.pk }}"
+                                            data-pontos="{{ opcao.pontos|stringformat:'.2f' }}"
+                                            {% if linha.validado_opcao_id == opcao.pk|stringformat:"s" %}selected{% endif %}>
+                                        {{ opcao.rotulo }} ({{ opcao.pontos|floatformat:"-2" }} pts)
+                                    </option>
+                                    {% endfor %}
+                                </select>
+
+                                {% else %}
+                                <input class="campo-validado"
+                                       name="validado_qtd_{{ linha.item.pk }}"
+                                       type="number" min="0" step="1"
+                                       value="{{ linha.validado_qtd }}"
+                                       data-valida data-tipo="contagem"
+                                       data-por-unidade="{{ linha.criterio.pontos_por_unidade|default:0|stringformat:'.2f' }}"
+                                       data-maximo="{{ linha.criterio.maximo|stringformat:'.2f' }}">
+                                {% endif %}
                             </div>
 
                             {# observação de avaliação #}
                             <div class="campo-bloco campo-obs">
                                 <span class="campo-label">Observa&ccedil;&atilde;o</span>
                                 <textarea
-                                    name="obs_{{ item.pk }}"
+                                    name="obs_{{ linha.item.pk }}"
                                     placeholder="observa&ccedil;&atilde;o opcional..."
-                                >{{ item.observacao_avaliacao|default:'' }}</textarea>
+                                >{{ linha.item.observacao_avaliacao|default:'' }}</textarea>
                             </div>
 
                         </div>
@@ -418,12 +490,6 @@
                             <div class="total-valor total-validado-val">
                                 <span id="total-validado">{{ inscricao.total_validado|floatformat:1 }}</span><span class="pts">pts</span>
                             </div>
-                            {% if inscricao.modalidade == 'servidor' %}
-                            <div style="font-size:11px;color:#888;margin-top:3px;line-height:1.5">
-                                <span id="formula-validado-api">0,0</span> (IFGProduz)
-                                + <span id="formula-validado-crit">0,0</span> (Crit&eacute;rios) &divide; 2
-                            </div>
-                            {% endif %}
                         </div>
                     </div>
 

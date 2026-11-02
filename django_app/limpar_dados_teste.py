@@ -1,8 +1,9 @@
 # limpar_dados_teste.py
 # Banco de Talentos — Polo de Inovação IFG
 # Apaga dados de teste preservando CriterioEdital e superusuário.
-# Uso: python manage.py shell < limpar_dados_teste.py
-#   ou: python manage.py runscript limpar_dados_teste (se usar django-extensions)
+# Uso (dentro de django_app/):
+#   source .venv/bin/activate
+#   python manage.py shell < limpar_dados_teste.py
 
 from apps.inscricoes.models import Inscricao
 from apps.auditoria.models import AuditLog

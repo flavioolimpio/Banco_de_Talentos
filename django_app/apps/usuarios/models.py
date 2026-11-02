@@ -3,6 +3,8 @@ from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
 
+from apps.usuarios.cnpq import CNPQ_AREAS, GRANDES_AREAS_CNPQ
+
 
 class Vinculo(models.TextChoices):
     ESTUDANTE = "estudante", "Estudante"
@@ -34,6 +36,65 @@ class MaiorTitulacao(models.TextChoices):
     ESPECIALIZACAO = "especializacao", "Especialização"
     MESTRADO = "mestrado", "Mestrado"
     DOUTORADO = "doutorado", "Doutorado"
+
+
+def resumo_tem_tamanho_valido(texto: str) -> bool:
+    """Item 4.2 V do Edital: resumo de 50 a 200 palavras."""
+    return 50 <= len(texto.split()) <= 200
+
+
+# Cadastro completo (item 4.4.2 do Edital): os campos do item 4.2 mais as
+# declarações. Cada vínculo tem o seu Edital — 29 (servidores), 30 (externos),
+# 31 (estudantes) — e o estudante não tem categoria nem titulação: a categoria
+# dele é "Estudante". Em troca, informa a instituição de ensino (IFG ou outra
+# ICT) e o curso em andamento.
+#
+# A data de nascimento é o último critério de desempate (maior idade, Anexos I
+# e III do Edital 29); pedida no cadastro, o desempate não depende de consulta
+# posterior. A finalidade está declarada no item 4.2, I (LGPD, art. 6º, I).
+#
+# CAMPOS_CADASTRO é a lista completa; o que não se aplica ao vínculo some do
+# formulário (CAMPOS_FORA_DO_VINCULO) e o que aparece mas não é obrigatório
+# está em CAMPOS_OPCIONAIS_DO_VINCULO. Nome e e-mail ficam de fora porque o
+# cadastro inicial já os exige.
+CAMPOS_CADASTRO = [
+    "data_nascimento", "telefone", "uf", "cidade",
+    "categoria_pretendida", "servidor_ativo",
+    "maior_titulacao", "instituicao", "area_atuacao", "resumo", "lattes",
+]
+CAMPOS_FORA_DO_VINCULO = {
+    Vinculo.SERVIDOR: {"instituicao"},
+    Vinculo.COLABORADOR_EXTERNO: {"instituicao", "servidor_ativo"},
+    Vinculo.ESTUDANTE: {"categoria_pretendida", "servidor_ativo", "maior_titulacao"},
+}
+CAMPOS_OPCIONAIS_DO_VINCULO = {
+    Vinculo.ESTUDANTE: {"resumo"},
+}
+DECLARACOES_CADASTRO = [
+    "ciencia_credenciamento",
+    "ciencia_comunicacoes",
+    "declaracao_veracidade",
+    "consentimento_verificacao_bases",
+]
+# O Edital 30 (colaboradores externos) não prevê verificação em bases internas
+# do IFG, que não tem dados de quem é de fora (decisão de 28/10/2026).
+DECLARACOES_FORA_DO_VINCULO = {
+    Vinculo.COLABORADOR_EXTERNO: {"consentimento_verificacao_bases"},
+}
+# Como cada pendência aparece para o candidato.
+ROTULOS_PENDENCIA = {
+    "data_nascimento": "data de nascimento",
+    "telefone": "telefone",
+    "uf": "estado",
+    "cidade": "município",
+    "categoria_pretendida": "categoria pretendida",
+    "servidor_ativo": "situação funcional (ativo ou inativo)",
+    "maior_titulacao": "maior titulação concluída",
+    "instituicao": "instituição de ensino",
+    "area_atuacao": "curso",
+    "resumo": "resumo da atuação profissional (50 a 200 palavras)",
+    "lattes": "link do currículo Lattes",
+}
 
 
 class UsuarioManager(BaseUserManager):
@@ -125,6 +186,22 @@ class Usuario(AbstractUser):
         "não afastado(a)/licenciado(a)", null=True, blank=True
     )
 
+    cnpq_area = models.CharField(
+        "área do conhecimento (CNPq)", max_length=10, choices=CNPQ_AREAS, blank=True
+    )
+
+    # Ciência de que receberá e-mail com a divulgação de vagas (Bloco F da
+    # especificação). É CIÊNCIA, não consentimento: avisar quem está no Banco
+    # a cada chamada é obrigação do Polo (item 5.2.2 do Edital), e ser avisado
+    # de vagas é o próprio motivo de existir do cadastro. Por isso segue o
+    # mesmo padrão de via única das demais declarações — ver
+    # confirmar_declaracao(). Quem não quiser mais receber pede
+    # descredenciamento do Banco (item 7.1), que é a saída prevista.
+    ciencia_comunicacoes = models.BooleanField(
+        "ciência de que receberá e-mail com a divulgação de vagas", default=False
+    )
+    ciencia_comunicacoes_em = models.DateTimeField(null=True, blank=True)
+
     ciencia_credenciamento = models.BooleanField("ciência de que o credenciamento não garante vaga", default=False)
     ciencia_credenciamento_em = models.DateTimeField(null=True, blank=True)
     declaracao_veracidade = models.BooleanField("declaração de veracidade (art. 299 CP)", default=False)
@@ -162,20 +239,47 @@ class Usuario(AbstractUser):
             setattr(self, f"{campo}_em", timezone.now())
 
     @property
+    def grande_area_cnpq(self) -> str:
+        """Grande área derivada do prefixo do código — ex.: "1.06" → Exatas.
+
+        Derivada em vez de armazenada numa segunda coluna, que só teria como
+        ficar dessincronizada com a área.
+        """
+        if not self.cnpq_area:
+            return ""
+        return GRANDES_AREAS_CNPQ.get(self.cnpq_area[0], "")
+
+    def pendencias_cadastro(self) -> list[str]:
+        """O que falta para o cadastro ficar completo (item 4.4.2 do Edital).
+
+        Lista vazia = credenciado(a) e apto(a) a se inscrever em Chamada
+        Interna (item 5.3). Os campos exigidos dependem do vínculo: ver
+        CAMPOS_CADASTRO e campos_cadastro_exigidos().
+        """
+        faltam = []
+        for campo in self.campos_cadastro_exigidos():
+            valor = getattr(self, campo)
+            if valor in (None, ""):
+                faltam.append(ROTULOS_PENDENCIA.get(campo, campo))
+            elif campo == "resumo" and not resumo_tem_tamanho_valido(valor):
+                # Resumo do cadastro antigo, gravado antes da regra das
+                # 50 a 200 palavras: preenchido, mas fora do item 4.2 V.
+                faltam.append(ROTULOS_PENDENCIA["resumo"])
+        if not all(getattr(self, d) for d in self.declaracoes_exigidas()):
+            faltam.append("declarações (aba Declarações)")
+        return faltam
+
+    def declaracoes_exigidas(self) -> list[str]:
+        """Declarações que o vínculo precisa firmar (itens 4.3 e 4.4 do seu Edital)."""
+        fora = DECLARACOES_FORA_DO_VINCULO.get(self.vinculo, set())
+        return [d for d in DECLARACOES_CADASTRO if d not in fora]
+
+    def campos_cadastro_exigidos(self) -> list[str]:
+        """Campos do formulário que o vínculo precisa preencher."""
+        fora = CAMPOS_FORA_DO_VINCULO.get(self.vinculo, set())
+        opcionais = CAMPOS_OPCIONAIS_DO_VINCULO.get(self.vinculo, set())
+        return [c for c in CAMPOS_CADASTRO if c not in fora | opcionais]
+
+    @property
     def perfil_completo(self) -> bool:
-        campos = [
-            self.categoria_pretendida,
-            self.nivel_formacao,
-            self.area_atuacao,
-            self.disponibilidade_semanal,
-        ]
-        if self.vinculo == Vinculo.SERVIDOR:
-            campos.append(self.servidor_ativo)
-        declaracoes = [
-            self.ciencia_credenciamento,
-            self.declaracao_veracidade,
-            self.consentimento_verificacao_bases,
-        ]
-        if self.vinculo == Vinculo.SERVIDOR and self.servidor_ativo:
-            declaracoes.append(self.nao_afastado_licenciado)
-        return all(c not in (None, "") for c in campos) and all(declaracoes)
+        return not self.pendencias_cadastro()

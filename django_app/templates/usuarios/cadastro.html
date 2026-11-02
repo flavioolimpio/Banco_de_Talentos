@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Cadastro - Banco de Especialistas IFG{% endblock %}
 
@@ -12,8 +13,10 @@
         {% csrf_token %}
         {{ form.non_field_errors }}
         {% for field in form %}
-            {% if field.name == "aceite_lgpd" %}
-                <label class="check-row">
+            {% if field.field.widget.input_type == "checkbox" %}
+                {# O consentimento de bases não vale para externo (DECLARACOES_FORA_DO_VINCULO, #}
+                {# em apps/usuarios/models.py); cadastro.js esconde a caixa quando ele é escolhido. #}
+                <label class="check-row"{% if field.name == "consentimento_verificacao_bases" %} id="campo-consentimento-bases" data-oculta-para-vinculo="colaborador_externo"{% endif %}>
                     {{ field }}
                     <span>{{ field.label }}</span>
                 </label>
@@ -28,4 +31,8 @@
         <button type="submit" class="primary-button">Cadastrar</button>
     </form>
 </section>
+
+{# Esconde o consentimento de bases para colaborador externo. Arquivo externo #}
+{# porque a CSP de produção bloqueia <script> inline (script-src 'self').      #}
+<script src="{% static 'js/cadastro.js' %}" defer></script>
 {% endblock %}

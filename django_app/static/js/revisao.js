@@ -1,72 +1,64 @@
 // static/js/revisao.js
 // Banco de Talentos — Polo de Inovação IFG
-// Recalcula o "Total validado" da tela de revisão do RH em tempo real.
-// Para servidor aplica a mesma fórmula do candidato:
-//   (min(IFGProduz, 100) + min(critérios, 100)) / 2
-// Para as demais modalidades, soma simples.
 //
-// Carregado como arquivo externo (não inline) por causa da CSP do site,
-// que só permite scripts servidos pelo próprio domínio (script-src 'self').
+// Recalcula o "Total validado" da tela de revisão do RH em tempo real,
+// enquanto a pessoa confirma a quantidade ou a opção de cada critério.
+//
+// Só conforto visual: quem vale é o servidor, em views_rh._validar_item, que
+// usa exatamente o mesmo CriterioEdital.pontuar() do formulário do candidato.
+//
+// A antiga fórmula de média com o IFGProduz saiu junto com o quadro fixo do
+// Servidor: no fluxo por chamada, o total é a soma simples dos critérios.
+//
+// Arquivo externo por causa da CSP (script-src 'self').
 (function () {
     "use strict";
 
-    var inputs      = document.querySelectorAll('[id^="validado_"]');
-    var spanTotal   = document.getElementById("total-validado");
-    var dados       = document.getElementById("revisao-dados");
-    var isServidor  = dados && dados.dataset.servidor === "true";
-    var formulaApi  = document.getElementById("formula-validado-api");
-    var formulaCrit = document.getElementById("formula-validado-crit");
+    var campos = document.querySelectorAll("[data-valida]");
+    var spanTotal = document.getElementById("total-validado");
+    // Critérios do credenciamento antigo continuam com pontuação digitada.
+    var legados = document.querySelectorAll('input[id^="validado_"]');
 
     function fmt(n) {
-        return n.toFixed(1).replace('.', ',');
+        return n.toFixed(1).replace(".", ",");
     }
 
-    // valor considerado de um input: o digitado pelo RH ou, se vazio,
-    // a pontuação declarada pelo candidato (data-candidato)
-    function valorDe(inp) {
-        var raw = inp.value.trim();
-        if (raw !== "") {
-            var v = parseFloat(raw);
-            return isNaN(v) ? 0 : v;
-        }
-        var cand = parseFloat(inp.dataset.candidato);
-        return isNaN(cand) ? 0 : cand;
-    }
-
-    function calcularTotal() {
-        var totalManual = 0;
-        var totalApi = 0;
-        inputs.forEach(function (inp) {
-            var v = valorDe(inp);
-            if (inp.dataset.api === "true") {
-                totalApi += v;
-            } else {
-                totalManual += v;
-            }
-        });
-
-        var total;
-        if (isServidor) {
-            // mesma fórmula do candidato: (min(IFGProduz,100) + min(critérios,100)) / 2
-            var apiCap  = Math.min(totalApi, 100);
-            var critCap = Math.min(totalManual, 100);
-            total = (apiCap + critCap) / 2;
-            if (formulaApi)  { formulaApi.textContent  = fmt(apiCap); }
-            if (formulaCrit) { formulaCrit.textContent = fmt(critCap); }
+    function pontosDe(campo) {
+        var pontos;
+        if (campo.dataset.tipo === "escolha") {
+            var opcao = campo.options[campo.selectedIndex];
+            pontos = parseFloat((opcao && opcao.dataset.pontos) || 0) || 0;
         } else {
-            total = totalManual + totalApi;
+            var qtd = parseInt(campo.value, 10);
+            if (isNaN(qtd) || qtd < 0) qtd = 0;
+            pontos = qtd * (parseFloat(campo.dataset.porUnidade) || 0);
+            var maximo = parseFloat(campo.dataset.maximo);
+            if (!isNaN(maximo) && pontos > maximo) pontos = maximo;
         }
-
-        if (spanTotal) {
-            spanTotal.textContent = fmt(total);
-        }
+        return pontos;
     }
 
-    // calcular ao carregar a página
-    calcularTotal();
+    function recalcular() {
+        var total = 0;
+        campos.forEach(function (campo) { total += pontosDe(campo); });
+        legados.forEach(function (input) {
+            var valor = parseFloat(String(input.value).replace(",", "."));
+            if (isNaN(valor)) {
+                // Campo em branco: vale o que o candidato declarou.
+                valor = parseFloat(input.placeholder.replace(",", ".")) || 0;
+            }
+            total += valor;
+        });
+        if (spanTotal) spanTotal.textContent = fmt(total);
+    }
 
-    // recalcular a cada alteração
-    inputs.forEach(function (inp) {
-        inp.addEventListener("input", calcularTotal);
+    campos.forEach(function (campo) {
+        campo.addEventListener("input", recalcular);
+        campo.addEventListener("change", recalcular);
     });
+    legados.forEach(function (input) {
+        input.addEventListener("input", recalcular);
+    });
+
+    recalcular();
 }());

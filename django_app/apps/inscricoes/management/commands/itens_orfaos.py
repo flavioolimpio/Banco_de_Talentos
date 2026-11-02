@@ -4,14 +4,18 @@
 # "órfãos": itens de pontuação amarrados a critérios que NÃO fazem mais
 # parte do quadro atual daquela inscrição.
 #
-# Isso acontece quando os critérios mudam depois que a pessoa se inscreve
-# (ex.: o Apoio Técnico ganhou quadro próprio com IFGProduz). O formulário
-# do candidato passa a mostrar os critérios novos, mas os itens antigos
-# continuam guardados na inscrição e aparecem na revisão do RH.
+# Isso acontece quando a Coordenação do Projeto edita o quadro da chamada
+# depois que alguém já se inscreveu: o formulário passa a mostrar os critérios
+# novos, mas os itens antigos continuam guardados na inscrição e aparecem na
+# revisão do RH.
+#
+# A comparação é feita contra o quadro DA CHAMADA de cada inscrição — não mais
+# contra um quadro global por modalidade, que deixou de existir.
 #
 # Uso:
-#   python manage.py itens_orfaos          # só lista (não cria arquivo)
-#   python manage.py itens_orfaos --csv    # lista E gera o CSV
+#   python manage.py itens_orfaos                # todas as chamadas
+#   python manage.py itens_orfaos --chamada 4    # só uma
+#   python manage.py itens_orfaos --csv          # lista E gera o CSV
 #
 # Apenas consulta + exportação. NUNCA altera nem apaga dados do banco.
 
@@ -19,24 +23,24 @@ import csv
 
 from django.core.management.base import BaseCommand
 
-from apps.inscricoes.models import CriterioEdital, Inscricao, TipoServidor
+from apps.inscricoes.models import CriterioEdital, Inscricao
 
 # Caminho do CSV gerado, relativo à pasta onde o manage.py é executado
 CSV_PATH = "itens_orfaos.csv"
 
 
-def _criterio_ids_validos(modalidade, tipo_servidor):
+def _criterio_ids_validos(chamada_id, modalidade, tipo_servidor):
+    """IDs dos critérios válidos HOJE para uma inscrição.
+
+    Mesma regra do formulário do candidato (_criterios_da, em
+    views_chamadas.py): dentro da chamada, valem os critérios da modalidade
+    cujo tipo_servidor seja o da inscrição ou vazio (quadro compartilhado).
     """
-    Conjunto de IDs de critérios válidos HOJE para uma inscrição, usando a
-    mesma regra do formulário do candidato (_get_criterios em views.py):
-    critérios de Pesquisador ficam no quadro compartilhado (tipo_servidor="");
-    apenas Apoio Técnico tem quadro próprio.
-    """
-    ts = tipo_servidor if tipo_servidor == TipoServidor.APOIO_TECNICO else ""
     return set(
         CriterioEdital.objects.filter(
+            chamada_id=chamada_id,
             modalidade=modalidade,
-            tipo_servidor=ts,
+            tipo_servidor__in=["", tipo_servidor or ""],
             ativo=True,
         ).values_list("pk", flat=True)
     )
@@ -54,21 +58,28 @@ class Command(BaseCommand):
             action="store_true",
             help=f"Gera o arquivo {CSV_PATH} com a lista dos afetados.",
         )
+        parser.add_argument(
+            "--chamada",
+            type=int,
+            help="Limita a verificação a uma chamada (padrão: todas).",
+        )
 
     def handle(self, *args, **options):
         inscricoes = (
-            Inscricao.objects.select_related("usuario")
+            Inscricao.objects.select_related("usuario", "chamada")
             .prefetch_related("itens__criterio")
             .order_by("usuario__nome_completo")
         )
+        if options["chamada"]:
+            inscricoes = inscricoes.filter(chamada_id=options["chamada"])
 
-        # cache dos critérios válidos por (modalidade, tipo_servidor) para
-        # não repetir a consulta a cada inscrição
+        # cache dos critérios válidos por (chamada, modalidade, tipo_servidor)
+        # para não repetir a consulta a cada inscrição
         cache_validos = {}
         afetados = []  # lista de tuplas (inscricao, [itens_orfaos])
 
         for ins in inscricoes:
-            chave = (ins.modalidade, ins.tipo_servidor or "")
+            chave = (ins.chamada_id, ins.modalidade, ins.tipo_servidor or "")
             if chave not in cache_validos:
                 cache_validos[chave] = _criterio_ids_validos(*chave)
             validos = cache_validos[chave]
