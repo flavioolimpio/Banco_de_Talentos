@@ -791,6 +791,18 @@ class CadastroInicialConsentimentoTest(TestCase):
         resposta = self.client.get(reverse("cadastro"))
         self.assertContains(resposta, 'name="consentimento_verificacao_bases"')
 
+    def test_tela_de_cadastro_carrega_script_que_esconde_consentimento_do_externo(self):
+        from apps.usuarios.models import DECLARACOES_FORA_DO_VINCULO
+
+        resposta = self.client.get(reverse("cadastro"))
+        self.assertContains(resposta, "js/cadastro.js")
+        self.assertContains(resposta, 'id="campo-consentimento-bases"')
+        # O atributo lido pelo JS tem de bater com a regra do servidor.
+        ocultos = " ".join(
+            v for v, fora in DECLARACOES_FORA_DO_VINCULO.items() if "consentimento_verificacao_bases" in fora
+        )
+        self.assertContains(resposta, f'data-oculta-para-vinculo="{ocultos}"')
+
     def test_cadastro_grava_consentimento_com_data(self):
         resposta = self.client.post(reverse("cadastro"), self._dados())
         self.assertEqual(resposta.status_code, 302)
